@@ -10,6 +10,7 @@ import {
   toggleFavorite,
   selectIsListingFavorite,
   selectIsToggleFavoriteInProgress,
+  selectFavoriteListingIds,
 } from '../../ducks/favorites.duck';
 
 import IconHeart from '../IconHeart/IconHeart';
@@ -70,10 +71,35 @@ const FavoriteButton = props => {
 
   const classes = classNames(rootClassName || css.root, className);
 
+  const allFavoriteIds = useSelector(selectFavoriteListingIds);
+
   return (
-    <button type="button" className={classes} onClick={handleClick} disabled={inProgress}>
-      <IconHeart className={css.icon} isFilled={isFavorite} ariaLabel={ariaLabel} />
-    </button>
+    <>
+      <button type="button" className={classes} onClick={handleClick} disabled={inProgress}>
+        <IconHeart className={css.icon} isFilled={isFavorite} ariaLabel={ariaLabel} />
+      </button>
+      {/* TEMP DEBUG - remove after diagnosing. Positions relative to whatever ancestor the
+          button itself already relies on (e.g. .imageOverlayWrapper / .sectionHero), since it's
+          a sibling of the button, not a new wrapper - so it doesn't change the button's layout. */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '40px',
+          right: '8px',
+          zIndex: 999,
+          background: 'yellow',
+          color: 'black',
+          fontSize: '9px',
+          padding: '2px 4px',
+          whiteSpace: 'nowrap',
+          maxWidth: '260px',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+      >
+        id={listingId} fav={String(isFavorite)} set={favoriteListingIdsSet ? 'Y' : 'N'} all=[{allFavoriteIds.join(',')}]
+      </div>
+    </>
   );
 };
 
