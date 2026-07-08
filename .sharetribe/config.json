@@ -2,5 +2,9 @@
   "localSetupComplete": true,
   "githubUsername": "froggo96",
   "githubRepo": "froggo96/Teetribe-Vibecode",
-  "githubRepoUrl": "https://github.com/froggo96/Teetribe-Vibecode.git"
+  "githubRepoUrl": "https://github.com/froggo96/Teetribe-Vibecode.git",
+  "renderServiceName": "teetribe-vibecode",
+  "stagingUrl": "https://teetribe-vibecode.onrender.com",
+  "basicAuthEnabled": false,
+  "marketplaceName": "teetribe"
 }
