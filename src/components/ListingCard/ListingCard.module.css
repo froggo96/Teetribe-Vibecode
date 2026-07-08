@@ -11,6 +11,10 @@
   }
 }
 
+.imageOverlayWrapper {
+  position: relative;
+}
+
 .aspectRatioWrapper {
   transition: var(--transitionStyleButton);
   background: var(--colorGrey100); /* Loading BG color */

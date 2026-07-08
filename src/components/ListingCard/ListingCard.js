@@ -15,6 +15,7 @@ import {
   NamedLink,
   ResponsiveImage,
   ListingCardThumbnail,
+  FavoriteButton,
 } from '../../components';
 
 import { getListingCardTranslations } from './ListingCard.helpers';
@@ -93,6 +94,8 @@ const ListingCardImage = props => {
  * @param {string?} props.renderSizes for img/srcset
  * @param {Function?} props.setActiveListing
  * @param {boolean?} props.showAuthorInfo
+ * @param {Object?} props.currentUser - The current user, if logged in (enables the favorite button)
+ * @param {Set<string>?} props.favoriteListingIdsSet - Memoized set of favorited listing ids, see FavoriteButton
  * @returns {JSX.Element} listing card to be used in search result panel etc.
  */
 export const ListingCard = props => {
@@ -109,6 +112,8 @@ export const ListingCard = props => {
     setActiveListing,
     showAuthorInfo = true,
     lazyLoadImage = true,
+    currentUser,
+    favoriteListingIdsSet,
   } = props;
 
   const translations = getListingCardTranslations(listing, config, intl);
@@ -155,28 +160,37 @@ export const ListingCard = props => {
       params={{ id, slug }}
       ariaLabel={cardAriaLabel}
     >
-      {showListingImage ? (
-        <ListingCardImage
-          renderSizes={renderSizes}
-          title={titlePlain}
-          listing={listing}
-          setActivePropsMaybe={setActivePropsMaybe}
-          aspectWidth={aspectWidth}
-          aspectHeight={aspectHeight}
-          variantPrefix={variantPrefix}
-          aspectRatioClassName={aspectRatioClassName}
-          lazyLoadImage={lazyLoadImage}
-        />
-      ) : (
-        <ListingCardThumbnail
-          style={cardStyle}
-          listingTitle={title}
-          className={aspectRatioClassName}
-          width={aspectWidth}
-          height={aspectHeight}
-          setActivePropsMaybe={setActivePropsMaybe}
-        />
-      )}
+      <div className={css.imageOverlayWrapper}>
+        {showListingImage ? (
+          <ListingCardImage
+            renderSizes={renderSizes}
+            title={titlePlain}
+            listing={listing}
+            setActivePropsMaybe={setActivePropsMaybe}
+            aspectWidth={aspectWidth}
+            aspectHeight={aspectHeight}
+            variantPrefix={variantPrefix}
+            aspectRatioClassName={aspectRatioClassName}
+            lazyLoadImage={lazyLoadImage}
+          />
+        ) : (
+          <ListingCardThumbnail
+            style={cardStyle}
+            listingTitle={title}
+            className={aspectRatioClassName}
+            width={aspectWidth}
+            height={aspectHeight}
+            setActivePropsMaybe={setActivePropsMaybe}
+          />
+        )}
+        {id ? (
+          <FavoriteButton
+            listing={listing}
+            currentUser={currentUser}
+            favoriteListingIdsSet={favoriteListingIdsSet}
+          />
+        ) : null}
+      </div>
       <div className={css.info}>
         {showPrice ? (
           <div className={css.price} title={priceTooltip}>

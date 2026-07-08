@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { FormattedMessage } from '../../util/reactIntl';
-import { ResponsiveImage, Modal } from '../../components';
+import { ResponsiveImage, Modal, FavoriteButton } from '../../components';
 
 import ImageCarousel from './ImageCarousel/ImageCarousel';
 
@@ -18,11 +18,13 @@ const SectionHero = props => {
   const {
     title,
     listing,
+    isOwnListing,
     handleViewPhotosClick,
     imageCarouselOpen,
     onImageCarouselClose,
     onManageDisableScrolling,
     actionBar,
+    currentUser,
   } = props;
 
   const hasImages = listing.images && listing.images.length > 0;
@@ -47,6 +49,9 @@ const SectionHero = props => {
           <div onClick={e => e.stopPropagation()} className={css.actionBarContainerForHeroLayout}>
             {actionBar}
           </div>
+        ) : null}
+        {mounted && listing.id && !isOwnListing ? (
+          <FavoriteButton listing={listing} currentUser={currentUser} />
         ) : null}
 
         <ResponsiveImage

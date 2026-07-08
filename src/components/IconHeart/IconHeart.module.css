@@ -1,0 +1,9 @@
+.root {
+  fill: rgba(255, 255, 255, 0.8);
+  color: var(--colorGrey700);
+}
+
+.filled {
+  fill: var(--colorFail, #ff0000);
+  color: var(--colorFail, #ff0000);
+}

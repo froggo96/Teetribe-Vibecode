@@ -752,6 +752,7 @@
 }
 
 .productGallery {
+  position: relative;
   margin: 0 0 36px 0;
 
   @media (--viewportMedium) {

@@ -8,6 +8,7 @@ import auth from './auth.duck';
 import emailVerification from './emailVerification.duck';
 import routing from './routing.duck';
 import ui from './ui.duck';
+import favorites from './favorites.duck';
 import hostedAssets from './hostedAssets.duck';
 import featuredListings from './featuredListings.duck';
 import marketplaceData from './marketplaceData.duck';
@@ -21,6 +22,7 @@ export {
   emailVerification,
   routing,
   ui,
+  favorites,
   hostedAssets,
   featuredListings,
   marketplaceData,

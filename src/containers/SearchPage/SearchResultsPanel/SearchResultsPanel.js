@@ -18,6 +18,8 @@ import css from './SearchResultsPanel.module.css';
  * @param {Object} props.search - The search
  * @param {Function} props.setActiveListing - The function to handle the active listing
  * @param {boolean} [props.isMapVariant] - Whether the map variant is enabled
+ * @param {Object} [props.currentUser] - The current user, if logged in (enables the favorite button)
+ * @param {Set<string>} [props.favoriteListingIdsSet] - Memoized set of favorited listing ids
  * @returns {JSX.Element}
  */
 const SearchResultsPanel = props => {
@@ -31,6 +33,8 @@ const SearchResultsPanel = props => {
     isMapVariant = true,
     listingTypeParam,
     intl,
+    currentUser,
+    favoriteListingIdsSet,
   } = props;
   const classes = classNames(rootClassName || css.root, className);
   const pageName = listingTypeParam ? 'SearchPageWithListingType' : 'SearchPage';
@@ -82,6 +86,8 @@ const SearchResultsPanel = props => {
               listing={l}
               renderSizes={cardRenderSizes(isMapVariant)}
               setActiveListing={setActiveListing}
+              currentUser={currentUser}
+              favoriteListingIdsSet={favoriteListingIdsSet}
             />
           </li>
         ))}

@@ -274,6 +274,7 @@ export const ListingPageComponent = props => {
             handleViewPhotosClick={handleViewPhotosClick}
             onManageDisableScrolling={onManageDisableScrolling}
             actionBar={actionBar}
+            currentUser={currentUser}
           />
         ) : (
           <div className={css.actionBarContainerForNoListingImage}>{actionBar}</div>

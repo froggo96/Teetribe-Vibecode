@@ -261,6 +261,7 @@ export const MainContent = props => {
     intl,
     hideReviews,
     userTypeRoles,
+    currentUser,
   } = props;
 
   const hasListings = listings.length > 0;
@@ -312,7 +313,7 @@ export const MainContent = props => {
           <ul className={css.listings}>
             {listings.map(l => (
               <li className={css.listing} key={l.id.uuid}>
-                <ListingCard listing={l} showAuthorInfo={false} />
+                <ListingCard listing={l} showAuthorInfo={false} currentUser={currentUser} />
               </li>
             ))}
           </ul>
@@ -486,6 +487,7 @@ export const ProfilePageComponent = props => {
           hideReviews={hasNoViewingRightsOnPrivateMarketplace}
           intl={intl}
           userTypeRoles={userTypeRoles}
+          currentUser={currentUser}
           {...rest}
         />
       </LayoutSideNavigation>

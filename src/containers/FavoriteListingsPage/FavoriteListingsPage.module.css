@@ -1,0 +1,90 @@
+@import '../../styles/customMediaQueries.css';
+
+.listingPanel {
+  width: 100%;
+  margin: 24px auto 0 auto;
+
+  @media (--viewportMedium) {
+    margin: 48px auto 0 auto;
+  }
+
+  @media (--viewportLarge) {
+    margin: 72px auto 0 auto;
+    max-width: calc(var(--contentMaxWidth) + 72px);
+  }
+
+  @media (--viewportXLarge) {
+    max-width: var(--contentMaxWidth);
+  }
+}
+
+.noResultsContainer {
+  margin: 0 24px;
+
+  @media (--viewportMedium) {
+    margin: 0 24px;
+  }
+
+  @media (--viewportLarge) {
+    margin: 0 36px;
+  }
+}
+
+.heading {
+  margin: 0 24px 24px 24px;
+
+  @media (--viewportMedium) {
+    margin: 0 24px 32px 24px;
+  }
+
+  @media (--viewportLarge) {
+    margin: 0 36px 32px 36px;
+  }
+}
+
+.headingNoListings {
+  margin: 0 0 12px 0;
+
+  @media (--viewportMedium) {
+    margin: 0 0 8px 0;
+  }
+}
+
+.browseListingsLink {
+  color: var(--marketplaceColor);
+  text-decoration: underline;
+
+  &:hover {
+    color: var(--marketplaceColorDark);
+    text-decoration: underline;
+  }
+}
+
+.listingCards {
+  list-style: none;
+  margin: 0;
+  padding: 0 24px;
+
+  display: grid;
+  grid-template-columns: repeat(1, 1fr);
+  gap: 24px;
+  width: 100%;
+
+  @media (min-width: 550px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  @media (--viewportMedium) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  @media (--viewportLarge) {
+    grid-template-columns: repeat(3, 1fr);
+    padding: 0 36px;
+  }
+}
+
+.listingCard {
+  margin-bottom: 36px;
+  width: 100%;
+}

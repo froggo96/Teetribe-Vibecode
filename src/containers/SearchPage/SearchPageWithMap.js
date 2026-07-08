@@ -7,6 +7,7 @@ import { isOriginInUse } from '../../util/search';
 import { parse } from '../../util/urlHelpers';
 import { createResourceLocatorString, pathByRouteName } from '../../util/routes';
 import { makeGetListingsByIdSelector } from '../../ducks/marketplaceData.duck';
+import { makeSelectFavoriteListingIdsSet } from '../../ducks/favorites.duck';
 import { manageDisableScrolling, isScrollingDisabled } from '../../ducks/ui.duck';
 
 import { ModalInMobile, Page } from '../../components';
@@ -226,6 +227,7 @@ export class SearchPageComponent extends Component {
       config,
       params: currentPathParams = {},
       currentUser,
+      favoriteListingIdsSet,
     } = this.props;
 
     const {
@@ -453,6 +455,8 @@ export class SearchPageComponent extends Component {
                   isMapVariant
                   listingTypeParam={listingTypePathParam}
                   intl={intl}
+                  currentUser={currentUser}
+                  favoriteListingIdsSet={favoriteListingIdsSet}
                 />
               </div>
             )}
@@ -501,8 +505,10 @@ export class SearchPageComponent extends Component {
 const SearchPage = props => {
   const dispatch = useDispatch();
   const selectListingsById = useMemo(makeGetListingsByIdSelector, []);
+  const selectFavoriteListingIdsSet = useMemo(makeSelectFavoriteListingIdsSet, []);
 
   const currentUser = useSelector(state => state.user?.currentUser);
+  const favoriteListingIdsSet = useSelector(selectFavoriteListingIdsSet);
   const {
     pagination,
     searchInProgress,
@@ -529,6 +535,7 @@ const SearchPage = props => {
       {...props}
       PageComponent={SearchPageComponent}
       currentUser={currentUser}
+      favoriteListingIdsSet={favoriteListingIdsSet}
       listings={listings}
       pagination={pagination}
       scrollingDisabled={scrollingDisabled}
