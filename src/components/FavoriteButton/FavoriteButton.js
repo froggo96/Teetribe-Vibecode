@@ -91,13 +91,13 @@ const FavoriteButton = props => {
           color: 'black',
           fontSize: '9px',
           padding: '2px 4px',
-          whiteSpace: 'nowrap',
-          maxWidth: '260px',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-all',
+          width: '220px',
         }}
       >
-        id={listingId} fav={String(isFavorite)} set={favoriteListingIdsSet ? 'Y' : 'N'} all=[{allFavoriteIds.join(',')}]
+        id={listingId}{'\n'}fav={String(isFavorite)} set={favoriteListingIdsSet ? 'Y' : 'N'}{'\n'}
+        all=[{allFavoriteIds.join(', ')}]
       </div>
     </>
   );
