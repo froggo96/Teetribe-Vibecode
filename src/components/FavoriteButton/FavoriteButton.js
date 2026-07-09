@@ -72,6 +72,12 @@ const FavoriteButton = props => {
   const classes = classNames(rootClassName || css.root, className);
 
   const allFavoriteIds = useSelector(selectFavoriteListingIds);
+  // TEMP DEBUG
+  const toggleError = useSelector(state => state.favorites.toggleFavoritesError[listingId]);
+  const currentUserShowTimestamp = useSelector(state => state.user.currentUserShowTimestamp);
+  const currentUserPrivateData = useSelector(
+    state => state.user.currentUser?.attributes?.profile?.privateData
+  );
 
   return (
     <>
@@ -96,8 +102,11 @@ const FavoriteButton = props => {
           width: '220px',
         }}
       >
-        id={listingId}{'\n'}fav={String(isFavorite)} set={favoriteListingIdsSet ? 'Y' : 'N'}{'\n'}
-        all=[{allFavoriteIds.join(', ')}]
+        id={listingId}{'\n'}fav={String(isFavorite)} inProg={String(inProgress)}{'\n'}
+        all=[{allFavoriteIds.join(', ')}]{'\n'}
+        userTS={currentUserShowTimestamp} now={Date.now()}{'\n'}
+        userPD=[{JSON.stringify(currentUserPrivateData)}]{'\n'}
+        err=[{toggleError ? JSON.stringify(toggleError) : 'none'}]
       </div>
     </>
   );
