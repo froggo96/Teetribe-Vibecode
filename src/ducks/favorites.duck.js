@@ -1,6 +1,7 @@
 import { createSelector, createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { denormalisedResponseEntities } from '../util/data';
 import { storableError } from '../util/errors';
+import { toggleFavoriteListing } from '../util/api';
 import { setCurrentUser, fetchCurrentUserThunk } from './user.duck';
 
 // ================ Helper Functions ================ //
@@ -10,7 +11,12 @@ const getFavoriteListingIds = currentUser =>
 
 // ================ Async Thunks ================ //
 
-const toggleFavoritePayloadCreator = (listingId, { getState, dispatch, extra: sdk, rejectWithValue }) => {
+// The write goes through this app's own server (server/api/toggle-favorite.js)
+// rather than calling sdk.currentUser.updateProfile directly from the browser,
+// so it reuses the server's battle-tested cookie-token handling (the same path
+// every SSR page load already depends on) instead of the browser SDK's own
+// token refresh, which turned out to be flaky for this call in practice.
+const toggleFavoritePayloadCreator = (listingId, { getState, dispatch, rejectWithValue }) => {
   const { favoriteListingIds } = getState().favorites;
   const isCurrentlyFavorite = favoriteListingIds.includes(listingId);
   const nextFavoriteListingIds = isCurrentlyFavorite
@@ -20,12 +26,11 @@ const toggleFavoritePayloadCreator = (listingId, { getState, dispatch, extra: sd
   // NOTE: this overwrites privateData entirely. Since favoriteListingIds is
   // the only privateData key in use today, this is safe - if another feature
   // starts using privateData, this call needs to merge with the existing value instead.
-  return sdk.currentUser
-    .updateProfile({ privateData: { favoriteListingIds: nextFavoriteListingIds } }, { expand: true })
+  return toggleFavoriteListing({ favoriteListingIds: nextFavoriteListingIds })
     .then(response => {
       const entities = denormalisedResponseEntities(response);
       if (entities.length !== 1) {
-        throw new Error('Expected a resource in the sdk.currentUser.updateProfile response');
+        throw new Error('Expected a resource in the toggle-favorite response');
       }
       dispatch(setCurrentUser(entities[0]));
       return { listingId, isNowFavorite: !isCurrentlyFavorite };

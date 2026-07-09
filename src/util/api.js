@@ -151,3 +151,8 @@ export const createUserWithIdp = body => {
 export const deleteUserAccount = body => {
   return post('/api/delete-account', body);
 };
+
+// Save the current user's favorite listing ids (see server/api/toggle-favorite.js).
+export const toggleFavoriteListing = body => {
+  return post('/api/toggle-favorite', body);
+};
