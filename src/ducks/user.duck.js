@@ -320,6 +320,11 @@ const userSlice = createSlice({
     },
     setCurrentUser: (state, action) => {
       state.currentUser = mergeCurrentUser(state.currentUser, action.payload);
+      // Without this, a fetchCurrentUser() call shortly after (e.g. from a page's
+      // loadData on navigation) doesn't get short-circuited by the freshness check
+      // below, so it can race a genuinely fresher setCurrentUser update and win with
+      // stale data purely because its response happened to arrive last.
+      state.currentUserShowTimestamp = action.payload ? new Date().getTime() : 0;
     },
     setCurrentUserHasOrders: state => {
       state.currentUserHasOrders = true;

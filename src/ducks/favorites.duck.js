@@ -2,7 +2,7 @@ import { createSelector, createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import { denormalisedResponseEntities } from '../util/data';
 import { storableError } from '../util/errors';
 import { toggleFavoriteListing } from '../util/api';
-import { setCurrentUser, fetchCurrentUserThunk } from './user.duck';
+import { setCurrentUser } from './user.duck';
 
 // ================ Helper Functions ================ //
 
@@ -15,9 +15,16 @@ const getFavoriteListingIds = currentUser =>
 // rather than calling sdk.currentUser.updateProfile directly from the browser,
 // so it reuses the server's battle-tested cookie-token handling (the same path
 // every SSR page load already depends on) instead of the browser SDK's own
-// token refresh, which turned out to be flaky for this call in practice.
+// token refresh.
+//
+// Note: favoriteListingIds is read directly from state.user.currentUser (the
+// single source of truth) rather than from a separate mirrored copy - a
+// mirrored copy synced by listening to actions has a window where it can
+// disagree with currentUser (e.g. a stale fetchCurrentUser() response landing
+// after a toggle), which caused a real bug where a favorite would silently
+// revert. Reading directly from currentUser makes that class of bug impossible.
 const toggleFavoritePayloadCreator = (listingId, { getState, dispatch, rejectWithValue }) => {
-  const { favoriteListingIds } = getState().favorites;
+  const favoriteListingIds = getFavoriteListingIds(getState().user.currentUser);
   const isCurrentlyFavorite = favoriteListingIds.includes(listingId);
   const nextFavoriteListingIds = isCurrentlyFavorite
     ? favoriteListingIds.filter(id => id !== listingId)
@@ -48,37 +55,22 @@ export const toggleFavorite = listingId => dispatch => dispatch(toggleFavoriteTh
 
 // ================ Slice ================ //
 
+// Only ephemeral, UI-only state lives here (whether a toggle request is in
+// flight, and its error). The favorited ids themselves are derived from
+// state.user.currentUser by the selectors below - there is no copy to sync.
 const favoritesSlice = createSlice({
   name: 'favorites',
   initialState: {
-    favoriteListingIds: [],
     toggleFavoritesInProgress: {},
     toggleFavoritesError: {},
   },
   reducers: {},
   extraReducers: builder => {
     builder
-      // Keep favoriteListingIds in sync whenever the current user is (re)set,
-      // regardless of what triggered the refresh - both the plain setCurrentUser
-      // action (dispatched by other ducks after their own updateProfile calls)
-      // and fetchCurrentUserThunk (used for initial page loads) need to sync here,
-      // since they update user.duck.js's state independently of one another.
-      .addCase(setCurrentUser, (state, action) => {
-        state.favoriteListingIds = getFavoriteListingIds(action.payload);
-      })
-      .addCase(fetchCurrentUserThunk.fulfilled, (state, action) => {
-        state.favoriteListingIds = getFavoriteListingIds(action.payload);
-      })
       .addCase(toggleFavoriteThunk.pending, (state, action) => {
         const listingId = action.meta.arg;
         state.toggleFavoritesInProgress[listingId] = true;
         state.toggleFavoritesError[listingId] = null;
-
-        // Optimistic update - flip the id immediately, roll back on rejection.
-        const isCurrentlyFavorite = state.favoriteListingIds.includes(listingId);
-        state.favoriteListingIds = isCurrentlyFavorite
-          ? state.favoriteListingIds.filter(id => id !== listingId)
-          : [...state.favoriteListingIds, listingId];
       })
       .addCase(toggleFavoriteThunk.fulfilled, (state, action) => {
         const { listingId } = action.payload;
@@ -89,12 +81,6 @@ const favoritesSlice = createSlice({
         const listingId = action.meta.arg;
         delete state.toggleFavoritesInProgress[listingId];
         state.toggleFavoritesError[listingId] = action.payload;
-
-        // Roll back the optimistic flip.
-        const isCurrentlyFavorite = state.favoriteListingIds.includes(listingId);
-        state.favoriteListingIds = isCurrentlyFavorite
-          ? state.favoriteListingIds.filter(id => id !== listingId)
-          : [...state.favoriteListingIds, listingId];
       });
   },
 });
@@ -103,21 +89,24 @@ export default favoritesSlice.reducer;
 
 // ================ Selectors ================ //
 
-export const selectFavoriteListingIds = state => state.favorites.favoriteListingIds;
+export const selectFavoriteListingIds = state => getFavoriteListingIds(state.user.currentUser);
 
 export const selectIsListingFavorite = (state, listingId) =>
-  state.favorites.favoriteListingIds.includes(listingId);
+  selectFavoriteListingIds(state).includes(listingId);
 
 export const selectIsToggleFavoriteInProgress = (state, listingId) =>
   !!state.favorites.toggleFavoritesInProgress[listingId];
 
 /**
- * Create a memoized selector that returns a Set of favorited listing ids.
- * Use with `useMemo(makeSelectFavoriteListingIdsSet, [])` inside components
- * that render many listing cards, so each card can do an O(1) `Set.has()`
- * check instead of an `Array.includes()` scan.
+ * Create a memoized selector that returns a Set of favorited listing ids,
+ * derived from state.user.currentUser. Use with `useMemo(makeSelectFavoriteListingIdsSet, [])`
+ * inside components that render many listing cards, so each card can do an
+ * O(1) `Set.has()` check instead of an `Array.includes()` scan.
  *
  * @returns {(state: Object) => Set<string>}
  */
 export const makeSelectFavoriteListingIdsSet = () =>
-  createSelector([selectFavoriteListingIds], favoriteListingIds => new Set(favoriteListingIds));
+  createSelector(
+    [state => state.user.currentUser],
+    currentUser => new Set(getFavoriteListingIds(currentUser))
+  );
