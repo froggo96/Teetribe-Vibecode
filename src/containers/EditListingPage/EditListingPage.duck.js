@@ -17,8 +17,16 @@ import * as log from '../../util/log';
 import { parse } from '../../util/urlHelpers';
 import { isUserAuthorized } from '../../util/userHelpers';
 import { isBookingProcessAlias } from '../../transactions/transaction';
+import { LISTING_STATE_DRAFT } from '../../util/types';
+import { PRICING_AND_STOCK } from './EditListingWizard/EditListingWizardTab';
+import {
+  VARIANT_ATTRIBUTE_KEYS,
+  VARIANT_GROUP_ID_KEY,
+  IS_PRIMARY_VARIANT_KEY,
+  SIBLING_LISTING_IDS_KEY,
+} from '../../util/variantHelpers';
 
-import { addMarketplaceEntities } from '../../ducks/marketplaceData.duck';
+import { addMarketplaceEntities, getMarketplaceEntities } from '../../ducks/marketplaceData.duck';
 import {
   createStripeAccount,
   updateStripeAccount,
@@ -116,6 +124,57 @@ export const requestShowListing = (actionPayload, config) => (dispatch, getState
   return dispatch(showListingThunk({ actionPayload, config })).unwrap();
 };
 
+///////////////////////////
+// Show Variant Siblings //
+///////////////////////////
+
+// Fetch every sibling listing (other size/color combinations) by id - the primary listing's own
+// siblingListingIds - so the variants panel can be pre-filled with existing combinations. This
+// deliberately avoids a pub_variantGroupId search filter: a per-product id is not the kind of
+// bounded value Sharetribe's search index is built for, whereas an `ids` lookup needs no index.
+export const showVariantSiblingsThunk = createAsyncThunk(
+  'EditListingPage/showVariantSiblings',
+  ({ siblingIds, config }, { dispatch, rejectWithValue, extra: sdk }) => {
+    if (!siblingIds?.length) {
+      return Promise.resolve(null);
+    }
+    const imageVariantInfo = getImageVariantInfo(config.layout.listingImage);
+    return sdk.ownListings
+      .query({
+        ids: siblingIds.map(sid => new UUID(sid)),
+        include: ['images', 'currentStock'],
+        'fields.image': imageVariantInfo.fieldsImage,
+        ...imageVariantInfo.imageVariants,
+      })
+      .then(response => {
+        dispatch(addMarketplaceEntities(response));
+        return response;
+      })
+      .catch(e => rejectWithValue(storableError(e)));
+  }
+);
+export const requestShowVariantSiblings = (siblingIds, config) => (dispatch, getState, sdk) => {
+  return dispatch(showVariantSiblingsThunk({ siblingIds, config })).unwrap();
+};
+
+// Selector: every sibling listing (excluding the primary itself, fully denormalised so
+// `.currentStock`/`.images` are populated) belonging to the given primary listing's variant
+// group, read from already-fetched marketplace data.
+export const getVariantSiblings = (state, primaryId) => {
+  if (!primaryId) {
+    return [];
+  }
+  const ownListingEntities = state.marketplaceData?.entities?.ownListing || {};
+  const siblingRefs = Object.values(ownListingEntities)
+    .filter(
+      l =>
+        l?.attributes?.publicData?.[VARIANT_GROUP_ID_KEY] === primaryId.uuid &&
+        l?.id?.uuid !== primaryId.uuid
+    )
+    .map(l => ({ id: l.id, type: 'ownListing' }));
+  return getMarketplaceEntities(state, siblingRefs);
+};
+
 ///////////////
 // Set Stock //
 ///////////////
@@ -198,6 +257,143 @@ export const requestCreateListingDraft = (data, config) => (dispatch, getState, 
   return dispatch(createListingDraftThunk({ data, config })).unwrap();
 };
 
+/////////////////////////////////////
+// Variant siblings (product variants) //
+/////////////////////////////////////
+
+// Every non-variant public data key, i.e. everything that must be identical across all sibling
+// listings of the same product (category, delivery method, other custom listing fields, etc).
+const sharedPublicDataOf = publicData => {
+  const excludedKeys = [
+    ...VARIANT_ATTRIBUTE_KEYS,
+    VARIANT_GROUP_ID_KEY,
+    IS_PRIMARY_VARIANT_KEY,
+    SIBLING_LISTING_IDS_KEY,
+  ];
+  return Object.fromEntries(
+    Object.entries(publicData || {}).filter(([key]) => !excludedKeys.includes(key))
+  );
+};
+
+// After a successful update of a variant-group's primary listing (any tab other than the
+// variants tab itself, e.g. details/photos/delivery), replay the same update onto every sibling
+// listing so shared fields (title, description, images, category, ...) never drift apart.
+const propagateToVariantSiblings = (sdk, dispatch, ownListingUpdateValues, response) => {
+  const publicData = response?.data?.data?.attributes?.publicData || {};
+  const isPrimary = publicData[IS_PRIMARY_VARIANT_KEY] === true;
+  const siblingIdStrings = publicData[SIBLING_LISTING_IDS_KEY] || [];
+  if (!isPrimary || siblingIdStrings.length === 0) {
+    return Promise.resolve();
+  }
+
+  return Promise.all(
+    siblingIdStrings.map(siblingIdString => {
+      const siblingId = new UUID(siblingIdString);
+      return sdk.ownListings
+        .update({ ...ownListingUpdateValues, id: siblingId }, { expand: true })
+        .then(r => dispatch(addMarketplaceEntities(r)))
+        .catch(e => log.error(e, 'propagate-to-variant-sibling-failed', { siblingId }));
+    })
+  );
+};
+
+// Handle a submit from the variants panel: update the primary listing with the combination
+// assigned to it, then create/update every other combination as a sibling listing (each one is
+// a real listing so it gets native, atomic stock reservation for free). Combinations that were
+// removed by the seller are closed (not deleted) by the caller before this runs.
+const updateVariantCombinations = (
+  { id, ownListingUpdateValues, variantCombinations, queryParams },
+  sdk,
+  dispatch,
+  getState
+) => {
+  const { id: _unusedId, images: submittedImages, price, ...sharedRest } = ownListingUpdateValues;
+  const primaryEntity = getState().marketplaceData.entities.ownListing[id.uuid];
+  const sharedPublicData = sharedPublicDataOf(primaryEntity?.attributes?.publicData);
+  const isPrimaryPublished = primaryEntity?.attributes?.state !== LISTING_STATE_DRAFT;
+  // The variants tab never submits images itself, so newly created siblings must inherit the
+  // primary's current images directly (there's nothing "submitted" to propagate here).
+  const currentImageIds = (primaryEntity?.relationships?.images?.data || []).map(ref => ref.id);
+  const sharedImages = submittedImages !== undefined ? submittedImages : currentImageIds;
+
+  const primaryCombo = variantCombinations.find(c => c.isPrimary);
+  const otherCombos = variantCombinations.filter(c => !c.isPrimary);
+
+  const publicDataFor = combo => ({
+    ...sharedPublicData,
+    [VARIANT_GROUP_ID_KEY]: id.uuid,
+    [IS_PRIMARY_VARIANT_KEY]: !!combo.isPrimary,
+    size: combo.size,
+    color: combo.color,
+  });
+
+  const updatePrimary = sdk.ownListings
+    .update(
+      {
+        id,
+        images: sharedImages,
+        price,
+        ...sharedRest,
+        publicData: publicDataFor(primaryCombo),
+      },
+      queryParams
+    )
+    .then(response =>
+      updateStockOfListingMaybe(id, primaryCombo.stockUpdate, dispatch).then(() => response)
+    );
+
+  // Resolves to the sibling's listing id once it's fully up to date.
+  const createOrUpdateSibling = combo => {
+    if (combo.existingListingId) {
+      const siblingId = combo.existingListingId;
+      return sdk.ownListings
+        .update({ id: siblingId, images: sharedImages, price, ...sharedRest }, { expand: true })
+        .then(() => updateStockOfListingMaybe(siblingId, combo.stockUpdate, dispatch))
+        .then(() => siblingId)
+        .catch(e => {
+          log.error(e, 'update-variant-sibling-failed', { siblingId });
+          throw e;
+        });
+    }
+
+    return sdk.ownListings
+      .createDraft(
+        {
+          title: primaryEntity?.attributes?.title,
+          images: sharedImages,
+          price,
+          ...sharedRest,
+          publicData: publicDataFor(combo),
+        },
+        { expand: true, ...queryParams }
+      )
+      .then(response => {
+        const siblingId = response.data.data.id;
+        return updateStockOfListingMaybe(siblingId, combo.stockUpdate, dispatch).then(() =>
+          isPrimaryPublished
+            ? sdk.ownListings.publishDraft({ id: siblingId }, { expand: true })
+            : Promise.resolve()
+        );
+      })
+      .then(() => siblingId)
+      .catch(e => {
+        log.error(e, 'create-variant-sibling-failed', { combo });
+        throw e;
+      });
+  };
+
+  return updatePrimary.then(() =>
+    Promise.all(otherCombos.map(createOrUpdateSibling)).then(siblingIds => {
+      // Every combination's listing id is now known - record them on the primary so it can
+      // always find its siblings again with a direct `ids` lookup (no search index needed).
+      return sdk.ownListings.update(
+        { id, publicData: { [SIBLING_LISTING_IDS_KEY]: siblingIds.map(sid => sid.uuid) } },
+        queryParams
+      );
+    })
+  );
+};
+
 ////////////////////
 // Update Listing //
 ////////////////////
@@ -209,7 +405,14 @@ export const requestCreateListingDraft = (data, config) => (dispatch, getState, 
 export const updateListingThunk = createAsyncThunk(
   'EditListingPage/updateListing',
   ({ tab, data, config }, { dispatch, getState, rejectWithValue, extra: sdk }) => {
-    const { id, stockUpdate, images, ...rest } = data;
+    const {
+      id,
+      stockUpdate,
+      images,
+      variantCombinations,
+      removedVariantListingIds,
+      ...rest
+    } = data;
 
     // If images should be saved, create array out of the image UUIDs for the API call
     const imageProperty = typeof images !== 'undefined' ? { images: imageIds(images) } : {};
@@ -221,6 +424,36 @@ export const updateListingThunk = createAsyncThunk(
       'fields.image': imageVariantInfo.fieldsImage,
       ...imageVariantInfo.imageVariants,
     };
+
+    const closeRemovedVariantsMaybe = removedVariantListingIds?.length
+      ? Promise.all(
+          removedVariantListingIds.map(siblingId =>
+            sdk.ownListings
+              .close({ id: siblingId }, { expand: true })
+              .catch(e => log.error(e, 'close-removed-variant-failed', { siblingId }))
+          )
+        )
+      : Promise.resolve();
+
+    if (variantCombinations) {
+      return closeRemovedVariantsMaybe
+        .then(() =>
+          updateVariantCombinations(
+            { id, ownListingUpdateValues, variantCombinations, queryParams },
+            sdk,
+            dispatch,
+            getState
+          )
+        )
+        .then(response => {
+          dispatch(addMarketplaceEntities(response));
+          return { response, tab };
+        })
+        .catch(e => {
+          log.error(e, 'update-listing-variants-failed', { listingData: data });
+          return rejectWithValue(storableError(e));
+        });
+    }
 
     return updateStockOfListingMaybe(id, stockUpdate, dispatch)
       .then(() => sdk.ownListings.update(ownListingUpdateValues, queryParams))
@@ -241,7 +474,15 @@ export const updateListingThunk = createAsyncThunk(
         }
 
         dispatch(addMarketplaceEntities(response));
-        return { response, tab };
+
+        // Tabs other than the variants tab itself must keep every sibling listing's shared
+        // fields (title, description, images, category, ...) in sync with the primary.
+        const propagateMaybe =
+          tab !== PRICING_AND_STOCK
+            ? propagateToVariantSiblings(sdk, dispatch, ownListingUpdateValues, response)
+            : Promise.resolve();
+
+        return propagateMaybe.then(() => ({ response, tab }));
       })
       .catch(e => {
         log.error(e, 'update-listing-failed', { listingData: data });
@@ -262,13 +503,43 @@ export const requestUpdateListing = (tab, data, config) => (dispatch, getState, 
 // Publish Listing //
 /////////////////////
 
+// If the just-published listing is the primary of a variant group, publish every sibling that's
+// still in draft state too - they were created alongside it but only the primary goes through
+// the wizard's own publish step.
+const publishDraftVariantSiblingsMaybe = (sdk, dispatch, siblingIdStrings) => {
+  if (!siblingIdStrings?.length) {
+    return Promise.resolve();
+  }
+  return sdk.ownListings
+    .query({ ids: siblingIdStrings.map(sid => new UUID(sid)) })
+    .then(response => {
+      const draftSiblings = response.data.data.filter(l => l.attributes.state === LISTING_STATE_DRAFT);
+      return Promise.all(
+        draftSiblings.map(sibling =>
+          sdk.ownListings
+            .publishDraft({ id: sibling.id }, { expand: true })
+            .then(r => dispatch(addMarketplaceEntities(r)))
+            .catch(e => log.error(e, 'publish-variant-sibling-failed', { siblingId: sibling.id }))
+        )
+      );
+    })
+    .catch(e => log.error(e, 'query-variant-siblings-for-publish-failed', {}));
+};
+
 const publishListingPayloadCreator = ({ listingId }, { dispatch, rejectWithValue, extra: sdk }) => {
   return sdk.ownListings
     .publishDraft({ id: listingId }, { expand: true })
     .then(response => {
       // Add the created listing to the marketplace data
       dispatch(addMarketplaceEntities(response));
-      return response;
+
+      const publicData = response?.data?.data?.attributes?.publicData || {};
+      const isPrimary = publicData[IS_PRIMARY_VARIANT_KEY] === true;
+      const cascadeMaybe = isPrimary
+        ? publishDraftVariantSiblingsMaybe(sdk, dispatch, publicData[SIBLING_LISTING_IDS_KEY])
+        : Promise.resolve();
+
+      return cascadeMaybe.then(() => response);
     })
     .catch(e => {
       return rejectWithValue(storableError(e));
@@ -903,6 +1174,14 @@ export const loadData = (params, search, config) => (dispatch, getState, sdk) =>
         const transactionProcessAlias = listing?.attributes?.publicData?.transactionProcessAlias;
         if (listing && isBookingProcessAlias(transactionProcessAlias)) {
           fetchLoadDataExceptions(dispatch, listing, search, config.localization.firstDayOfWeek);
+        }
+
+        // If this listing is the primary of a variant group, also fetch its siblings so the
+        // variants panel can be pre-filled with the existing size/color combinations.
+        const isPrimaryVariant = listing?.attributes?.publicData?.[IS_PRIMARY_VARIANT_KEY] === true;
+        const siblingIds = listing?.attributes?.publicData?.[SIBLING_LISTING_IDS_KEY];
+        if (listing && isPrimaryVariant && siblingIds?.length) {
+          dispatch(requestShowVariantSiblings(siblingIds, config));
         }
       }
 

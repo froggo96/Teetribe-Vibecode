@@ -8,6 +8,7 @@ import {
 } from '../../../util/urlHelpers';
 import { ensureListing } from '../../../util/data';
 import { createResourceLocatorString } from '../../../util/routes';
+import { hasVariants } from '../../../util/variantHelpers';
 
 // Import modules from this directory
 import EditListingAvailabilityPanel from './EditListingAvailabilityPanel/EditListingAvailabilityPanel';
@@ -17,6 +18,7 @@ import EditListingLocationPanel from './EditListingLocationPanel/EditListingLoca
 import EditListingPhotosPanel from './EditListingPhotosPanel/EditListingPhotosPanel';
 import EditListingPricingPanel from './EditListingPricingPanel/EditListingPricingPanel';
 import EditListingPricingAndStockPanel from './EditListingPricingAndStockPanel/EditListingPricingAndStockPanel';
+import EditListingPricingAndVariantsPanel from './EditListingPricingAndVariantsPanel/EditListingPricingAndVariantsPanel';
 import EditListingStylePanel from './EditListingStylePanel/EditListingStylePanel';
 
 import css from './EditListingWizardTab.module.css';
@@ -113,6 +115,7 @@ const EditListingWizardTab = props => {
     routeConfiguration,
     titleId,
     intl,
+    variantSiblings,
   } = props;
 
   const { type } = params;
@@ -121,6 +124,9 @@ const EditListingWizardTab = props => {
   const isNewListingFlow = isNewURI || isDraftURI;
 
   const currentListing = ensureListing(listing);
+  const currentListingTypeConfig = config.listing.listingTypes?.find(
+    conf => conf.listingType === currentListing?.attributes?.publicData?.listingType
+  );
 
   // New listing flow has automatic redirects to new tab on the wizard
   // and the last panel calls publishListing API endpoint.
@@ -205,7 +211,15 @@ const EditListingWizardTab = props => {
       );
     }
     case PRICING_AND_STOCK: {
-      return (
+      return hasVariants(currentListingTypeConfig) ? (
+        <EditListingPricingAndVariantsPanel
+          {...panelProps(PRICING_AND_STOCK)}
+          marketplaceCurrency={config.currency}
+          listingMinimumPriceSubUnits={config.listingMinimumPriceSubUnits}
+          listingFieldsConfig={config.listing.listingFields}
+          variantSiblings={variantSiblings}
+        />
+      ) : (
         <EditListingPricingAndStockPanel
           {...panelProps(PRICING_AND_STOCK)}
           marketplaceCurrency={config.currency}

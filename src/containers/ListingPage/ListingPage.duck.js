@@ -2,7 +2,12 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 
 import { types as sdkTypes, createImageVariantConfig } from '../../util/sdkLoader';
 import { storableError } from '../../util/errors';
-import { addMarketplaceEntities } from '../../ducks/marketplaceData.duck';
+import { addMarketplaceEntities, getMarketplaceEntities } from '../../ducks/marketplaceData.duck';
+import {
+  VARIANT_GROUP_ID_KEY,
+  IS_PRIMARY_VARIANT_KEY,
+  SIBLING_LISTING_IDS_KEY,
+} from '../../util/variantHelpers';
 import { transactionLineItems } from '../../util/api';
 import * as log from '../../util/log';
 import { denormalisedResponseEntities } from '../../util/data';
@@ -116,6 +121,69 @@ export const showListingThunk = createAsyncThunk(
 // Backward compatible wrapper for the thunk
 export const showListing = (listingId, config, isOwn = false) => (dispatch, getState, sdk) => {
   return dispatch(showListingThunk({ listingId, config, isOwn })).unwrap();
+};
+
+///////////////////////////
+// Show Variant Siblings //
+///////////////////////////
+
+// Fetch every other size/color combination of this product (real sibling listings) by id - the
+// primary listing's own siblingListingIds - so the listing page can render a variant picker
+// without ever navigating to a different page. Fetching by id (rather than searching for a
+// matching variantGroupId) means no search index needs to be configured for grouping to work.
+const showVariantSiblingsPayloadCreator = (
+  { siblingIds, config },
+  { dispatch, rejectWithValue, extra: sdk }
+) => {
+  if (!siblingIds?.length) {
+    return Promise.resolve(null);
+  }
+  const {
+    aspectWidth = 1,
+    aspectHeight = 1,
+    variantPrefix = 'listing-card',
+  } = config.layout.listingImage;
+  const aspectRatio = aspectHeight / aspectWidth;
+
+  return sdk.listings
+    .query({
+      ids: siblingIds.map(sid => new UUID(sid)),
+      include: ['images', 'currentStock'],
+      'fields.image': [`variants.${variantPrefix}`, `variants.${variantPrefix}-2x`],
+      ...createImageVariantConfig(`${variantPrefix}`, 400, aspectRatio),
+      ...createImageVariantConfig(`${variantPrefix}-2x`, 800, aspectRatio),
+    })
+    .then(response => {
+      const listingFields = config?.listing?.listingFields;
+      dispatch(addMarketplaceEntities(response, { listingFields }));
+      return response;
+    })
+    .catch(e => rejectWithValue(storableError(e)));
+};
+
+export const showVariantSiblingsThunk = createAsyncThunk(
+  'ListingPage/showVariantSiblings',
+  showVariantSiblingsPayloadCreator
+);
+export const showVariantSiblings = (siblingIds, config) => (dispatch, getState, sdk) => {
+  return dispatch(showVariantSiblingsThunk({ siblingIds, config })).unwrap();
+};
+
+// Selector: every sibling listing (excluding the primary itself), fully denormalised so
+// `.currentStock` is populated, belonging to the given primary listing's variant group.
+export const getVariantSiblingListings = (state, primaryId) => {
+  if (!primaryId) {
+    return [];
+  }
+  const listingEntities = state.marketplaceData?.entities?.listing || {};
+  const siblingRefs = Object.values(listingEntities)
+    .filter(
+      l =>
+        l?.attributes?.publicData?.[VARIANT_GROUP_ID_KEY] === primaryId.uuid &&
+        l?.id?.uuid !== primaryId.uuid
+    )
+    .map(l => ({ id: l.id, type: 'listing' }));
+  return getMarketplaceEntities(state, siblingRefs);
 };
 
 ///////////////////
@@ -566,6 +634,12 @@ export const loadData = (params, search, config) => (dispatch, getState, sdk) =>
       // This can happen parallel to loadData.
       // We are not interested to return them from loadData call.
       fetchMonthlyTimeSlots(dispatch, listing);
+    }
+    const isPrimaryVariant = listing?.attributes?.publicData?.[IS_PRIMARY_VARIANT_KEY] === true;
+    const siblingIds = listing?.attributes?.publicData?.[SIBLING_LISTING_IDS_KEY];
+    if (isPrimaryVariant && siblingIds?.length) {
+      // This can happen parallel to loadData too - the variant picker just renders once it lands.
+      dispatch(showVariantSiblings(siblingIds, config));
     }
     return response;
   });

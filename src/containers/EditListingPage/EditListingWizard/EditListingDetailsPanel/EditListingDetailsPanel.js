@@ -16,6 +16,7 @@ import {
   pickCategoryFields,
 } from '../../../../util/fieldHelpers';
 import { isBookingProcessAlias } from '../../../../transactions/transaction';
+import { excludeVariantAttributeFields } from '../../../../util/variantHelpers';
 
 // Import shared components
 import { H3, ListingLink } from '../../../../components';
@@ -314,7 +315,10 @@ const EditListingDetailsPanel = props => {
   const classes = classNames(rootClassName || css.root, className);
   const { publicData, state } = listing?.attributes || {};
   const listingTypes = config.listing.listingTypes;
-  const listingFields = config.listing.listingFields;
+  // Variant attribute fields (e.g. size, color) are managed by the dedicated variants panel,
+  // not this generic single-value listing-fields form - excluding them here also prevents this
+  // panel from overwriting them with null on every save (see pickListingFieldsData below).
+  const listingFields = excludeVariantAttributeFields(config.listing.listingFields);
   const listingCategories = config.categoryConfiguration.categories;
   const categoryKey = config.categoryConfiguration.key;
 

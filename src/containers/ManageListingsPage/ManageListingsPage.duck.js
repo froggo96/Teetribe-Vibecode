@@ -37,7 +37,11 @@ export const getOwnListingsById = (state, listingIds) => {
 ////////////////////////
 const queryOwnListingsPayloadCreator = (queryParams, { extra: sdk, dispatch, rejectWithValue }) => {
   const { perPage, ...rest } = queryParams;
-  const params = { ...rest, perPage };
+  // Variant siblings (e.g. other size/color combinations of the same product) are real listings
+  // under the hood, but the provider should only see one row per product here - only the primary
+  // listing of a variant group is shown. See the same filter in SearchPage.duck.js for the
+  // matching public-search-index requirement.
+  const params = { ...rest, pub_isPrimaryVariant: 'true', perPage };
 
   return sdk.ownListings
     .query(params)

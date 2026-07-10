@@ -19,6 +19,7 @@ import {
 } from '../../util/urlHelpers';
 
 import { LISTING_STATE_DRAFT, LISTING_STATE_PENDING_APPROVAL, propTypes } from '../../util/types';
+import { IS_PRIMARY_VARIANT_KEY, VARIANT_GROUP_ID_KEY } from '../../util/variantHelpers';
 import { isErrorNoPermissionToPostListings } from '../../util/errors';
 import { ensureOwnListing } from '../../util/data';
 import { hasPermissionToPostListings, isUserAuthorized } from '../../util/userHelpers';
@@ -44,6 +45,7 @@ import {
   requestImageUpload,
   removeListingImage,
   savePayoutDetails,
+  getVariantSiblings,
 } from './EditListingPage.duck';
 import EditListingWizard from './EditListingWizard/EditListingWizard';
 import css from './EditListingPage.module.css';
@@ -177,6 +179,14 @@ export const EditListingPageComponent = props => {
   const isPastDraft = currentListingState && currentListingState !== LISTING_STATE_DRAFT;
   const shouldRedirectAfterPosting = isNewListingFlow && listingId && isPastDraft;
 
+  // A variant sibling's shared fields (title, description, images, price, ...) must stay in
+  // sync with its group's primary listing, so it can't be edited on its own - send the provider
+  // to the primary listing's edit page instead.
+  const variantGroupId = currentListing.attributes?.publicData?.[VARIANT_GROUP_ID_KEY];
+  const isVariantSibling =
+    currentListing.attributes?.publicData?.[IS_PRIMARY_VARIANT_KEY] === false && !!variantGroupId;
+  const shouldRedirectToPrimaryVariant = !isNewListingFlow && isVariantSibling;
+
   const hasStripeOnboardingDataIfNeeded = returnURLType ? !!currentUser?.id : true;
   const showWizard = hasStripeOnboardingDataIfNeeded && (isNewURI || currentListing.id);
 
@@ -220,6 +230,8 @@ export const EditListingPageComponent = props => {
         };
 
     return <NamedRedirect {...redirectProps} />;
+  } else if (shouldRedirectToPrimaryVariant) {
+    return <NamedRedirect name="EditListingPage" params={{ ...params, id: variantGroupId }} />;
   } else if (showWizard) {
     const {
       createListingDraftError = null,
@@ -281,6 +293,7 @@ export const EditListingPageComponent = props => {
           history={history}
           images={images}
           listing={currentListing}
+          variantSiblings={variantSiblings}
           weeklyExceptionQueries={page.weeklyExceptionQueries}
           monthlyExceptionQueries={page.monthlyExceptionQueries}
           allExceptions={page.allExceptions}
@@ -332,7 +345,7 @@ export const EditListingPageComponent = props => {
   }
 };
 
-const mapStateToProps = state => {
+const mapStateToProps = (state, ownProps) => {
   const page = state.EditListingPage;
   const {
     getAccountLinkInProgress,
@@ -352,6 +365,9 @@ const mapStateToProps = state => {
 
   const { authScopes } = state.auth;
 
+  const listingId = page.submittedListingId || (ownProps.params?.id ? new UUID(ownProps.params.id) : null);
+  const variantSiblings = getVariantSiblings(state, listingId);
+
   return {
     getAccountLinkInProgress,
     getAccountLinkError,
@@ -366,6 +382,7 @@ const mapStateToProps = state => {
     page,
     scrollingDisabled: isScrollingDisabled(state),
     authScopes,
+    variantSiblings,
   };
 };
 

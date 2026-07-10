@@ -35,6 +35,7 @@ import {
   setInitialValues,
   fetchTimeSlots,
   fetchTransactionLineItems,
+  getVariantSiblingListings,
 } from './ListingPage.duck';
 
 import {
@@ -47,6 +48,8 @@ import {
   handleSubmit,
   priceForSchemaMaybe,
   getDerivedRenderData,
+  variantCombosOf,
+  resolveVariantListing,
 } from './ListingPage.shared';
 import SectionHero from './SectionHero';
 import SectionReviews from './SectionReviews';
@@ -55,6 +58,7 @@ import SectionMapMaybe from './SectionMapMaybe';
 import CustomListingFields from './CustomListingFields';
 import Notifications from './Notifications/Notifications';
 import ListingPageAccessWrapper from './ListingPageAccessWrapper';
+import VariantPicker from './VariantPicker/VariantPicker';
 
 import css from './ListingPage.module.css';
 
@@ -144,6 +148,21 @@ export const ListingPageComponent = props => {
     hasInvalidListingData,
   } = derivedData;
 
+  const variantSiblingListings = useSelector(state =>
+    getVariantSiblingListings(state, currentListing?.id)
+  );
+  const [variantSelection, setVariantSelection] = useState({});
+  const variantCombos = variantCombosOf(currentListing, variantSiblingListings);
+  const hasVariantCombos = variantCombos.length > 0;
+  const effectiveVariantSelection = {
+    size: variantSelection.size ?? publicData?.size,
+    color: variantSelection.color ?? publicData?.color,
+  };
+  const resolvedVariantListing = hasVariantCombos
+    ? resolveVariantListing(variantCombos, effectiveVariantSelection)
+    : null;
+  const isVariantCombinationUnavailable = hasVariantCombos && !resolvedVariantListing;
+
   const topbar = <TopbarContainer />;
 
   if (showListingError && showListingError.status === 404) {
@@ -202,8 +221,14 @@ export const ListingPageComponent = props => {
       });
       onNavigateToRequestQuotePage(values);
     } else {
+      // If the buyer picked a different size/color, checkout must target that sibling
+      // listing's id - everything else about handleSubmit stays generic.
+      const submitParams =
+        hasVariantCombos && resolvedVariantListing
+          ? { ...commonParams, params: { ...params, id: resolvedVariantListing.id.uuid } }
+          : commonParams;
       const onSubmit = handleSubmit({
-        ...commonParams,
+        ...submitParams,
         currentUser,
         callSetInitialValues,
         getListing,
@@ -330,9 +355,17 @@ export const ListingPageComponent = props => {
             />
           </div>
           <div className={css.orderColumnForHeroLayout}>
+            {hasVariantCombos ? (
+              <VariantPicker
+                combos={variantCombos}
+                selection={effectiveVariantSelection}
+                onChange={setVariantSelection}
+                isUnavailable={isVariantCombinationUnavailable}
+              />
+            ) : null}
             <OrderPanel
               className={css.orderPanel}
-              listing={currentListing}
+              listing={resolvedVariantListing || currentListing}
               isOwnListing={isOwnListing}
               onSubmit={handleOrderSubmit}
               authorLink={

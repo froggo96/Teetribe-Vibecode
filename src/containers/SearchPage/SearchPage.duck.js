@@ -321,6 +321,13 @@ const searchListingsPayloadCreator = ({ searchParams, config }, thunkAPI) => {
     ...stockMaybe,
     ...seatsMaybe,
     ...sortMaybe,
+    // Variant siblings (e.g. other size/color combinations of the same product) are real
+    // listings under the hood, but must never show up as separate search results - only the
+    // primary listing of a variant group represents the product in search.
+    // IMPORTANT: this requires the "isPrimaryVariant" listing field's search index to have a
+    // default value of `true` (Console/CLI), otherwise every listing that doesn't use variants
+    // (i.e. has no isPrimaryVariant set at all) would be wrongly excluded from search too.
+    pub_isPrimaryVariant: 'true',
     perPage,
   };
 

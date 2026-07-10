@@ -31,11 +31,48 @@ import {
   isPurchaseProcess,
   resolveLatestProcessName,
 } from '../../transactions/transaction';
+import { IS_PRIMARY_VARIANT_KEY, variantComboKey } from '../../util/variantHelpers';
 
 import { Page, LayoutSingleColumn, NamedLink } from '../../components';
 import FooterContainer from '../../containers/FooterContainer/FooterContainer';
 
 import css from './ListingPage.module.css';
+
+/**
+ * Every real listing behind this product (the primary listing itself plus every sibling),
+ * each carrying its own size/color combination. Returns [] unless this page's listing is the
+ * primary of a variant group - siblings are only ever resolved from there.
+ *
+ * @param {Object} currentListing the listing loaded for this page
+ * @param {Array<Object>} variantSiblingListings the other combinations, already fetched
+ * @returns {Array<{size, color, listing}>}
+ */
+export const variantCombosOf = (currentListing, variantSiblingListings) => {
+  const isPrimaryVariant =
+    currentListing?.attributes?.publicData?.[IS_PRIMARY_VARIANT_KEY] === true;
+  if (!isPrimaryVariant) {
+    return [];
+  }
+  const toCombo = listing => ({
+    size: listing?.attributes?.publicData?.size,
+    color: listing?.attributes?.publicData?.color,
+    listing,
+  });
+  return [toCombo(currentListing), ...(variantSiblingListings || []).map(toCombo)];
+};
+
+/**
+ * Find which listing (the primary or a sibling) matches the given size/color selection.
+ *
+ * @param {Array<{size, color, listing}>} combos from variantCombosOf
+ * @param {Object} selection e.g. { size: 'M', color: 'Red' }
+ * @returns {Object|null} the matching listing, or null if that combination doesn't exist
+ */
+export const resolveVariantListing = (combos, selection) => {
+  const key = variantComboKey(selection);
+  const match = (combos || []).find(c => variantComboKey(c) === key);
+  return match?.listing || null;
+};
 
 /**
  * This file contains shared functions from each ListingPage variants.
