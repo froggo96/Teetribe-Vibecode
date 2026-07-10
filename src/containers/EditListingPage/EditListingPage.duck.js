@@ -20,7 +20,7 @@ import { isBookingProcessAlias } from '../../transactions/transaction';
 import { LISTING_STATE_DRAFT } from '../../util/types';
 import { PRICING_AND_STOCK } from './EditListingWizard/EditListingWizardTab';
 import {
-  VARIANT_ATTRIBUTE_KEYS,
+  VARIANT_ATTRIBUTE_CONFIG_KEY,
   VARIANT_GROUP_ID_KEY,
   IS_PRIMARY_VARIANT_KEY,
   SIBLING_LISTING_IDS_KEY,
@@ -265,7 +265,7 @@ export const requestCreateListingDraft = (data, config) => (dispatch, getState, 
 // listings of the same product (category, delivery method, other custom listing fields, etc).
 const sharedPublicDataOf = publicData => {
   const excludedKeys = [
-    ...VARIANT_ATTRIBUTE_KEYS,
+    ...Object.values(VARIANT_ATTRIBUTE_CONFIG_KEY),
     VARIANT_GROUP_ID_KEY,
     IS_PRIMARY_VARIANT_KEY,
     SIBLING_LISTING_IDS_KEY,
@@ -323,8 +323,8 @@ const updateVariantCombinations = (
     ...sharedPublicData,
     [VARIANT_GROUP_ID_KEY]: id.uuid,
     [IS_PRIMARY_VARIANT_KEY]: !!combo.isPrimary,
-    size: combo.size,
-    color: combo.color,
+    [VARIANT_ATTRIBUTE_CONFIG_KEY.size]: combo.size,
+    [VARIANT_ATTRIBUTE_CONFIG_KEY.color]: combo.color,
   });
 
   const updatePrimary = sdk.ownListings

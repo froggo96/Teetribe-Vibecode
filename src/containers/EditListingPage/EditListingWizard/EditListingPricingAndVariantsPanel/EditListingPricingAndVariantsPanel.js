@@ -10,6 +10,7 @@ import {
   pickVariantAttributeFields,
   buildVariantCombinations,
   variantComboKey,
+  VARIANT_ATTRIBUTE_CONFIG_KEY,
 } from '../../../../util/variantHelpers';
 
 // Import shared components
@@ -32,15 +33,15 @@ const getListingTypeConfig = (publicData, listingTypes) => {
 const existingCombosOf = (listing, variantSiblings) => {
   const publicData = listing?.attributes?.publicData || {};
   const primaryCombo = {
-    size: publicData.size,
-    color: publicData.color,
+    size: publicData[VARIANT_ATTRIBUTE_CONFIG_KEY.size],
+    color: publicData[VARIANT_ATTRIBUTE_CONFIG_KEY.color],
     listingId: listing?.id,
     currentStock: listing?.currentStock?.attributes?.quantity,
     isPrimary: true,
   };
   const siblingCombos = (variantSiblings || []).map(sibling => ({
-    size: sibling.attributes?.publicData?.size,
-    color: sibling.attributes?.publicData?.color,
+    size: sibling.attributes?.publicData?.[VARIANT_ATTRIBUTE_CONFIG_KEY.size],
+    color: sibling.attributes?.publicData?.[VARIANT_ATTRIBUTE_CONFIG_KEY.color],
     listingId: sibling.id,
     currentStock: sibling.currentStock?.attributes?.quantity,
     isPrimary: false,
@@ -122,8 +123,8 @@ const EditListingPricingAndVariantsPanel = props => {
   const transactionProcessAlias = listingTypeConfig.transactionType.alias;
 
   const variantFields = pickVariantAttributeFields(listingFieldsConfig);
-  const sizeFieldConfig = variantFields.find(f => f.key === 'size');
-  const colorFieldConfig = variantFields.find(f => f.key === 'color');
+  const sizeFieldConfig = variantFields.find(f => f.key === VARIANT_ATTRIBUTE_CONFIG_KEY.size);
+  const colorFieldConfig = variantFields.find(f => f.key === VARIANT_ATTRIBUTE_CONFIG_KEY.color);
 
   const isPublished = listing?.id && listing?.attributes?.state !== LISTING_STATE_DRAFT;
 

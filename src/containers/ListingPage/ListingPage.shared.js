@@ -31,7 +31,11 @@ import {
   isPurchaseProcess,
   resolveLatestProcessName,
 } from '../../transactions/transaction';
-import { IS_PRIMARY_VARIANT_KEY, variantComboKey } from '../../util/variantHelpers';
+import {
+  IS_PRIMARY_VARIANT_KEY,
+  VARIANT_ATTRIBUTE_CONFIG_KEY,
+  variantComboKey,
+} from '../../util/variantHelpers';
 
 import { Page, LayoutSingleColumn, NamedLink } from '../../components';
 import FooterContainer from '../../containers/FooterContainer/FooterContainer';
@@ -54,8 +58,8 @@ export const variantCombosOf = (currentListing, variantSiblingListings) => {
     return [];
   }
   const toCombo = listing => ({
-    size: listing?.attributes?.publicData?.size,
-    color: listing?.attributes?.publicData?.color,
+    size: listing?.attributes?.publicData?.[VARIANT_ATTRIBUTE_CONFIG_KEY.size],
+    color: listing?.attributes?.publicData?.[VARIANT_ATTRIBUTE_CONFIG_KEY.color],
     listing,
   });
   return [toCombo(currentListing), ...(variantSiblingListings || []).map(toCombo)];

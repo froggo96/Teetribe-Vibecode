@@ -7,14 +7,22 @@
  * listing's own id). Only the primary has `publicData.isPrimaryVariant === true`.
  */
 
-// Listing fields that are used as variant attributes (e.g. size, color). These are configured as
-// normal enum listing fields, but are rendered by a dedicated variant picker/panel instead of the
-// generic single-value listing-fields UI, and are never overwritten by that generic UI.
+// Internal names for the two variant attributes this feature drives. Used for the in-memory
+// combo shape (`{ size, color }`) everywhere - form values, picker state, etc.
 export const VARIANT_ATTRIBUTE_KEYS = ['size', 'color'];
+
+// Maps each internal attribute name to the actual Console listing-field key configured for this
+// marketplace. These are NOT necessarily "size"/"color" literally - e.g. this marketplace's size
+// field happens to be keyed "StyleFormat" (label "Size"). Update this map, not the rest of the
+// code, if a marketplace's field keys differ.
+export const VARIANT_ATTRIBUTE_CONFIG_KEY = {
+  size: 'StyleFormat',
+  color: 'color',
+};
 
 // listingType ids (config.listing.listingTypes[].listingType) that use the variants feature.
 // This is a local, code-level opt-in since there's no hosted-config concept for it.
-export const VARIANT_LISTING_TYPES = ['product'];
+export const VARIANT_LISTING_TYPES = ['sell-products'];
 
 // A back-reference stored on every listing in a group (including the primary itself, pointing
 // to its own id) - read directly off an already-loaded listing, never used as a search filter.
@@ -32,7 +40,7 @@ export const SIBLING_LISTING_IDS_KEY = 'siblingListingIds';
 // rendered or saved by the generic single-value listing-fields UI (Details tab), even if the
 // operator has to declare isPrimaryVariant as a Console listing field to get it search-indexed.
 export const MANAGED_VARIANT_KEYS = [
-  ...VARIANT_ATTRIBUTE_KEYS,
+  ...Object.values(VARIANT_ATTRIBUTE_CONFIG_KEY),
   VARIANT_GROUP_ID_KEY,
   IS_PRIMARY_VARIANT_KEY,
   SIBLING_LISTING_IDS_KEY,
@@ -49,9 +57,11 @@ export const excludeVariantAttributeFields = listingFields => {
   return (listingFields || []).filter(field => !MANAGED_VARIANT_KEYS.includes(field?.key));
 };
 
-// Listing fields config containing only the variant attribute fields (size/color).
+// Listing fields config containing only the variant attribute fields (size/color), keyed by
+// their actual Console field keys (see VARIANT_ATTRIBUTE_CONFIG_KEY).
 export const pickVariantAttributeFields = listingFields => {
-  return (listingFields || []).filter(field => VARIANT_ATTRIBUTE_KEYS.includes(field?.key));
+  const configKeys = Object.values(VARIANT_ATTRIBUTE_CONFIG_KEY);
+  return (listingFields || []).filter(field => configKeys.includes(field?.key));
 };
 
 /**
