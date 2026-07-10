@@ -18,7 +18,11 @@ import { parse } from '../../util/urlHelpers';
 import { isUserAuthorized } from '../../util/userHelpers';
 import { isBookingProcessAlias } from '../../transactions/transaction';
 import { LISTING_STATE_DRAFT } from '../../util/types';
-import { PRICING_AND_STOCK } from './EditListingWizard/EditListingWizardTab';
+// Matches EditListingWizard/EditListingWizardTab.js's PRICING_AND_STOCK tab id. Duplicated as a
+// local literal (rather than imported) deliberately - a duck/redux module importing from a UI
+// component file created a circular import that crashed the production server bundle with a
+// "Cannot access before initialization" error.
+const PRICING_AND_STOCK_TAB = 'pricing-and-stock';
 import {
   VARIANT_ATTRIBUTE_CONFIG_KEY,
   VARIANT_GROUP_ID_KEY,
@@ -478,7 +482,7 @@ export const updateListingThunk = createAsyncThunk(
         // Tabs other than the variants tab itself must keep every sibling listing's shared
         // fields (title, description, images, category, ...) in sync with the primary.
         const propagateMaybe =
-          tab !== PRICING_AND_STOCK
+          tab !== PRICING_AND_STOCK_TAB
             ? propagateToVariantSiblings(sdk, dispatch, ownListingUpdateValues, response)
             : Promise.resolve();
 
