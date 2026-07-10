@@ -1478,5 +1478,6 @@
   "UserNav.yourListings": "Your listings",
   "VariantPicker.colorLabel": "Color",
   "VariantPicker.combinationUnavailable": "This combination is currently unavailable.",
+  "VariantPicker.selectionRequired": "Please select the options above first.",
   "VariantPicker.sizeLabel": "Size"
 }

@@ -16,11 +16,20 @@ const distinctValues = (combos, key) => [...new Set(combos.map(c => c[key]).filt
  * @param {Array<{size, color}>} props.combos every combination this product offers
  * @param {Object} props.selection the currently selected { size, color }
  * @param {Function} props.onChange called with the new { size, color } selection
- * @param {boolean} [props.isUnavailable] whether the current selection doesn't match a real listing
+ * @param {boolean} [props.isUnavailable] whether a complete selection doesn't match a real listing
+ * @param {boolean} [props.showSelectionRequired] whether to prompt for a selection (buyer tried to order without one)
  * @returns {JSX.Element}
  */
 const VariantPicker = props => {
-  const { className, rootClassName, combos, selection, onChange, isUnavailable } = props;
+  const {
+    className,
+    rootClassName,
+    combos,
+    selection,
+    onChange,
+    isUnavailable,
+    showSelectionRequired,
+  } = props;
   const classes = classNames(rootClassName || css.root, className);
 
   const sizes = distinctValues(combos, 'size');
@@ -69,6 +78,10 @@ const VariantPicker = props => {
       {isUnavailable ? (
         <p className={css.unavailable}>
           <FormattedMessage id="VariantPicker.combinationUnavailable" />
+        </p>
+      ) : showSelectionRequired ? (
+        <p className={css.unavailable}>
+          <FormattedMessage id="VariantPicker.selectionRequired" />
         </p>
       ) : null}
     </div>

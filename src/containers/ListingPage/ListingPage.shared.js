@@ -34,6 +34,7 @@ import {
 import {
   IS_PRIMARY_VARIANT_KEY,
   VARIANT_ATTRIBUTE_CONFIG_KEY,
+  VARIANT_ATTRIBUTE_KEYS,
   variantComboKey,
 } from '../../util/variantHelpers';
 
@@ -77,6 +78,20 @@ export const resolveVariantListing = (combos, selection) => {
   const match = (combos || []).find(c => variantComboKey(c) === key);
   return match?.listing || null;
 };
+
+/**
+ * Whether the buyer has picked a value for every variant attribute this product actually
+ * offers. Nothing is preselected on page load, so until this is true the picker shows a
+ * neutral "please select" state (not the red "unavailable" error) and checkout stays blocked.
+ *
+ * @param {Array<{size, color, listing}>} combos from variantCombosOf
+ * @param {Object} selection the buyer's current picks, e.g. { size: 'M' }
+ * @returns {boolean}
+ */
+export const isVariantSelectionComplete = (combos, selection) =>
+  VARIANT_ATTRIBUTE_KEYS.filter(key => (combos || []).some(c => c[key])).every(
+    key => !!selection?.[key]
+  );
 
 /**
  * This file contains shared functions from each ListingPage variants.

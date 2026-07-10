@@ -50,6 +50,7 @@ import {
   getDerivedRenderData,
   variantCombosOf,
   resolveVariantListing,
+  isVariantSelectionComplete,
 } from './ListingPage.shared';
 import SectionHero from './SectionHero';
 import SectionReviews from './SectionReviews';
@@ -151,17 +152,19 @@ export const ListingPageComponent = props => {
   const variantSiblingListings = useSelector(state =>
     getVariantSiblingListings(state, currentListing?.id)
   );
+  // Nothing is preselected on page load - the buyer must pick every offered attribute
+  // (size, color) before the underlying variant listing resolves and checkout is allowed.
   const [variantSelection, setVariantSelection] = useState({});
+  const [showVariantSelectionRequired, setShowVariantSelectionRequired] = useState(false);
   const variantCombos = variantCombosOf(currentListing, variantSiblingListings);
   const hasVariantCombos = variantCombos.length > 0;
-  const effectiveVariantSelection = {
-    size: variantSelection.size ?? publicData?.size,
-    color: variantSelection.color ?? publicData?.color,
-  };
-  const resolvedVariantListing = hasVariantCombos
-    ? resolveVariantListing(variantCombos, effectiveVariantSelection)
-    : null;
-  const isVariantCombinationUnavailable = hasVariantCombos && !resolvedVariantListing;
+  const isSelectionComplete = isVariantSelectionComplete(variantCombos, variantSelection);
+  const resolvedVariantListing =
+    hasVariantCombos && isSelectionComplete
+      ? resolveVariantListing(variantCombos, variantSelection)
+      : null;
+  const isVariantCombinationUnavailable =
+    hasVariantCombos && isSelectionComplete && !resolvedVariantListing;
 
   const topbar = <TopbarContainer />;
 
@@ -221,12 +224,18 @@ export const ListingPageComponent = props => {
       });
       onNavigateToRequestQuotePage(values);
     } else {
-      // If the buyer picked a different size/color, checkout must target that sibling
-      // listing's id - everything else about handleSubmit stays generic.
-      const submitParams =
-        hasVariantCombos && resolvedVariantListing
-          ? { ...commonParams, params: { ...params, id: resolvedVariantListing.id.uuid } }
-          : commonParams;
+      // Without a fully-selected, existing combination there is no specific variant listing
+      // to order - block checkout and point the buyer to the picker instead of silently
+      // ordering the primary listing's own combination.
+      if (hasVariantCombos && !resolvedVariantListing) {
+        setShowVariantSelectionRequired(true);
+        return;
+      }
+      // The buyer's picked size/color combination is a sibling listing - checkout must
+      // target that listing's id. Everything else about handleSubmit stays generic.
+      const submitParams = hasVariantCombos
+        ? { ...commonParams, params: { ...params, id: resolvedVariantListing.id.uuid } }
+        : commonParams;
       const onSubmit = handleSubmit({
         ...submitParams,
         currentUser,
@@ -358,9 +367,13 @@ export const ListingPageComponent = props => {
             {hasVariantCombos ? (
               <VariantPicker
                 combos={variantCombos}
-                selection={effectiveVariantSelection}
-                onChange={setVariantSelection}
+                selection={variantSelection}
+                onChange={selection => {
+                  setShowVariantSelectionRequired(false);
+                  setVariantSelection(selection);
+                }}
                 isUnavailable={isVariantCombinationUnavailable}
+                showSelectionRequired={showVariantSelectionRequired}
               />
             ) : null}
             <OrderPanel

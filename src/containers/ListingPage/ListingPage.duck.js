@@ -148,7 +148,8 @@ const showVariantSiblingsPayloadCreator = (
   return sdk.listings
     .query({
       ids: siblingIds.map(sid => new UUID(sid)),
-      include: ['images', 'currentStock'],
+      // author is included because checkout reads it off the selected variant listing
+      include: ['author', 'images', 'currentStock'],
       'fields.image': [`variants.${variantPrefix}`, `variants.${variantPrefix}-2x`],
       ...createImageVariantConfig(`${variantPrefix}`, 400, aspectRatio),
       ...createImageVariantConfig(`${variantPrefix}-2x`, 800, aspectRatio),
