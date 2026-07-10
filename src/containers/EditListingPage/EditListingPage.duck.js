@@ -373,13 +373,14 @@ const updateVariantCombinations = (
       )
       .then(response => {
         const siblingId = response.data.data.id;
-        return updateStockOfListingMaybe(siblingId, combo.stockUpdate, dispatch).then(() =>
-          isPrimaryPublished
-            ? sdk.ownListings.publishDraft({ id: siblingId }, { expand: true })
-            : Promise.resolve()
-        );
+        return updateStockOfListingMaybe(siblingId, combo.stockUpdate, dispatch)
+          .then(() =>
+            isPrimaryPublished
+              ? sdk.ownListings.publishDraft({ id: siblingId }, { expand: true })
+              : Promise.resolve()
+          )
+          .then(() => siblingId);
       })
-      .then(() => siblingId)
       .catch(e => {
         log.error(e, 'create-variant-sibling-failed', { combo });
         throw e;

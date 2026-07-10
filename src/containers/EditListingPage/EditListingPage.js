@@ -160,6 +160,7 @@ export const EditListingPageComponent = props => {
     stripeAccount,
     updateStripeAccountError,
     authScopes,
+    variantSiblings,
   } = props;
 
   const { id, type, returnURLType } = params;
