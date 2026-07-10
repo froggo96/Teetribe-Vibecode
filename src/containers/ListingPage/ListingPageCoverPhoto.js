@@ -236,11 +236,21 @@ export const ListingPageComponent = props => {
       const submitParams = hasVariantCombos
         ? { ...commonParams, params: { ...params, id: resolvedVariantListing.id.uuid } }
         : commonParams;
+      // Sibling listings carry no images of their own (an image can only be attached to one
+      // listing), so graft the primary's images onto the resolved variant for the checkout
+      // page's listing thumbnail.
+      const getListingWithVariantImages = listingId => {
+        const found = getListing(listingId);
+        const isResolvedVariant = found?.id?.uuid === resolvedVariantListing?.id?.uuid;
+        return isResolvedVariant && !found.images?.length
+          ? { ...found, images: currentListing.images }
+          : found;
+      };
       const onSubmit = handleSubmit({
         ...submitParams,
         currentUser,
         callSetInitialValues,
-        getListing,
+        getListing: hasVariantCombos ? getListingWithVariantImages : getListing,
         onInitializeCardPaymentData,
       });
       onSubmit(values);

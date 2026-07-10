@@ -280,45 +280,49 @@ const sharedPublicDataOf = publicData => {
 };
 
 // After a successful update of a variant-group's primary listing (any tab other than the
-// variants tab itself, e.g. details/photos/delivery), replay the same update onto every sibling
-// listing so shared fields (title, description, images, category, ...) never drift apart.
+// variants tab itself, e.g. details/delivery), replay the same update onto every sibling
+// listing so shared fields (title, description, category, ...) never drift apart.
+// IMPORTANT: images are never replayed - an image resource belongs to the listing it was first
+// attached to, and attaching it to another listing fails with 409 conflict. Sibling listings
+// carry no images of their own; buyers only ever see the primary listing's gallery.
 const propagateToVariantSiblings = (sdk, dispatch, ownListingUpdateValues, response) => {
   const publicData = response?.data?.data?.attributes?.publicData || {};
   const isPrimary = publicData[IS_PRIMARY_VARIANT_KEY] === true;
   const siblingIdStrings = publicData[SIBLING_LISTING_IDS_KEY] || [];
-  if (!isPrimary || siblingIdStrings.length === 0) {
+  const { id: _id, images: _images, ...siblingSafeValues } = ownListingUpdateValues;
+  const hasSharedUpdates = Object.keys(siblingSafeValues).length > 0;
+  if (!isPrimary || siblingIdStrings.length === 0 || !hasSharedUpdates) {
     return Promise.resolve();
   }
 
-  return Promise.all(
-    siblingIdStrings.map(siblingIdString => {
-      const siblingId = new UUID(siblingIdString);
-      return sdk.ownListings
-        .update({ ...ownListingUpdateValues, id: siblingId }, { expand: true })
+  // Sequential on purpose: a burst of parallel calls across many siblings is prone to
+  // rate-limiting, which used to leave the group only partially updated.
+  return siblingIdStrings.reduce((chain, siblingIdString) => {
+    const siblingId = new UUID(siblingIdString);
+    return chain.then(() =>
+      sdk.ownListings
+        .update({ ...siblingSafeValues, id: siblingId }, { expand: true })
         .then(r => dispatch(addMarketplaceEntities(r)))
-        .catch(e => log.error(e, 'propagate-to-variant-sibling-failed', { siblingId }));
-    })
-  );
+        .catch(e => log.error(e, 'propagate-to-variant-sibling-failed', { siblingId }))
+    );
+  }, Promise.resolve());
 };
 
 // Handle a submit from the variants panel: update the primary listing with the combination
 // assigned to it, then create/update every other combination as a sibling listing (each one is
 // a real listing so it gets native, atomic stock reservation for free). Combinations that were
 // removed by the seller are closed (not deleted) by the caller before this runs.
+// Note: sibling listings never get images (409 conflict, see propagateToVariantSiblings).
 const updateVariantCombinations = (
   { id, ownListingUpdateValues, variantCombinations, queryParams },
   sdk,
   dispatch,
   getState
 ) => {
-  const { id: _unusedId, images: submittedImages, price, ...sharedRest } = ownListingUpdateValues;
+  const { id: _unusedId, images: _images, price, ...sharedRest } = ownListingUpdateValues;
   const primaryEntity = getState().marketplaceData.entities.ownListing[id.uuid];
   const sharedPublicData = sharedPublicDataOf(primaryEntity?.attributes?.publicData);
   const isPrimaryPublished = primaryEntity?.attributes?.state !== LISTING_STATE_DRAFT;
-  // The variants tab never submits images itself, so newly created siblings must inherit the
-  // primary's current images directly (there's nothing "submitted" to propagate here).
-  const currentImageIds = (primaryEntity?.relationships?.images?.data || []).map(ref => ref.id);
-  const sharedImages = submittedImages !== undefined ? submittedImages : currentImageIds;
 
   const primaryCombo = variantCombinations.find(c => c.isPrimary);
   const otherCombos = variantCombinations.filter(c => !c.isPrimary);
@@ -332,26 +336,25 @@ const updateVariantCombinations = (
   });
 
   const updatePrimary = sdk.ownListings
-    .update(
-      {
-        id,
-        images: sharedImages,
-        price,
-        ...sharedRest,
-        publicData: publicDataFor(primaryCombo),
-      },
-      queryParams
-    )
+    .update({ id, price, ...sharedRest, publicData: publicDataFor(primaryCombo) }, queryParams)
     .then(response =>
       updateStockOfListingMaybe(id, primaryCombo.stockUpdate, dispatch).then(() => response)
     );
 
-  // Resolves to the sibling's listing id once it's fully up to date.
+  // Resolves to the sibling's listing id once it's fully up to date. Existing siblings that
+  // are somehow still drafts while the primary is published (e.g. an earlier partially-failed
+  // save) are published here too, so the whole group self-heals on the next save.
   const createOrUpdateSibling = combo => {
     if (combo.existingListingId) {
       const siblingId = combo.existingListingId;
       return sdk.ownListings
-        .update({ id: siblingId, images: sharedImages, price, ...sharedRest }, { expand: true })
+        .update({ id: siblingId, price, ...sharedRest }, { expand: true })
+        .then(response => {
+          const siblingState = response?.data?.data?.attributes?.state;
+          return isPrimaryPublished && siblingState === LISTING_STATE_DRAFT
+            ? sdk.ownListings.publishDraft({ id: siblingId }, { expand: true })
+            : Promise.resolve();
+        })
         .then(() => updateStockOfListingMaybe(siblingId, combo.stockUpdate, dispatch))
         .then(() => siblingId)
         .catch(e => {
@@ -364,7 +367,6 @@ const updateVariantCombinations = (
       .createDraft(
         {
           title: primaryEntity?.attributes?.title,
-          images: sharedImages,
           price,
           ...sharedRest,
           publicData: publicDataFor(combo),
@@ -387,8 +389,18 @@ const updateVariantCombinations = (
       });
   };
 
+  // Sequential on purpose - see propagateToVariantSiblings for why.
+  const processSiblingsSequentially = combos =>
+    combos.reduce(
+      (chain, combo) =>
+        chain.then(siblingIds =>
+          createOrUpdateSibling(combo).then(siblingId => [...siblingIds, siblingId])
+        ),
+      Promise.resolve([])
+    );
+
   return updatePrimary.then(() =>
-    Promise.all(otherCombos.map(createOrUpdateSibling)).then(siblingIds => {
+    processSiblingsSequentially(otherCombos).then(siblingIds => {
       // Every combination's listing id is now known - record them on the primary so it can
       // always find its siblings again with a direct `ids` lookup (no search index needed).
       return sdk.ownListings.update(
@@ -519,13 +531,19 @@ const publishDraftVariantSiblingsMaybe = (sdk, dispatch, siblingIdStrings) => {
     .query({ ids: siblingIdStrings.map(sid => new UUID(sid)) })
     .then(response => {
       const draftSiblings = response.data.data.filter(l => l.attributes.state === LISTING_STATE_DRAFT);
-      return Promise.all(
-        draftSiblings.map(sibling =>
-          sdk.ownListings
-            .publishDraft({ id: sibling.id }, { expand: true })
-            .then(r => dispatch(addMarketplaceEntities(r)))
-            .catch(e => log.error(e, 'publish-variant-sibling-failed', { siblingId: sibling.id }))
-        )
+      // Sequential on purpose: parallel publish bursts are prone to rate-limiting, which used
+      // to leave some siblings stuck in draft state (invisible and unpurchasable for buyers).
+      return draftSiblings.reduce(
+        (chain, sibling) =>
+          chain.then(() =>
+            sdk.ownListings
+              .publishDraft({ id: sibling.id }, { expand: true })
+              .then(r => dispatch(addMarketplaceEntities(r)))
+              .catch(e =>
+                log.error(e, 'publish-variant-sibling-failed', { siblingId: sibling.id })
+              )
+          ),
+        Promise.resolve()
       );
     })
     .catch(e => log.error(e, 'query-variant-siblings-for-publish-failed', {}));
