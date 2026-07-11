@@ -4,6 +4,7 @@ import { storableError } from '../../util/errors';
 import { createImageVariantConfig } from '../../util/sdkLoader';
 import { parse } from '../../util/urlHelpers';
 import { getReferralParams } from '../../util/webStorageHelpers';
+import { IS_PRIMARY_VARIANT_KEY } from '../../util/variantHelpers';
 
 import { fetchCurrentUser } from '../../ducks/user.duck';
 
@@ -15,7 +16,15 @@ const RESULT_PAGE_SIZE = 42;
 // ================ Selectors ================ //
 
 /**
- * Get the denormalised own listing entities with the given IDs
+ * Get the denormalised own listing entities with the given IDs, excluding variant sibling
+ * listings (they belong to a group, only the primary should show up as its own row here).
+ *
+ * NOTE: `own_listings/query` shows drafts/closed/pending-review listings too (unlike public
+ * search), so it isn't backed by the search index and can't filter by pub_isPrimaryVariant
+ * server-side - it's filtered here instead, client-side, after fetching. This means the
+ * "You have N listings" count and pagination reflect the *unfiltered* page size, not the
+ * number of cards actually shown - acceptable for a small number of listings, but worth
+ * revisiting if this marketplace grows enough for pagination to matter here.
  *
  * @param {Object} state the full Redux store
  * @param {Array<UUID>} listingIds listing IDs to select from the store
@@ -27,7 +36,8 @@ export const getOwnListingsById = (state, listingIds) => {
     type: 'ownListing',
   }));
   const throwIfNotFound = false;
-  return denormalisedEntities(ownEntities, resources, throwIfNotFound);
+  const listings = denormalisedEntities(ownEntities, resources, throwIfNotFound);
+  return listings.filter(l => l.attributes?.publicData?.[IS_PRIMARY_VARIANT_KEY] !== false);
 };
 
 // ================ Async Thunks ================ //
@@ -37,11 +47,10 @@ export const getOwnListingsById = (state, listingIds) => {
 ////////////////////////
 const queryOwnListingsPayloadCreator = (queryParams, { extra: sdk, dispatch, rejectWithValue }) => {
   const { perPage, ...rest } = queryParams;
-  // Variant siblings (e.g. other size/color combinations of the same product) are real listings
-  // under the hood, but the provider should only see one row per product here - only the primary
-  // listing of a variant group is shown. See the same filter in SearchPage.duck.js for the
-  // matching public-search-index requirement.
-  const params = { ...rest, pub_isPrimaryVariant: 'true', perPage };
+  const params = { ...rest, perPage };
+  // Variant siblings are excluded client-side in getOwnListingsById below, not here -
+  // own_listings/query isn't backed by the search index (it must show drafts/closed
+  // listings too), so a pub_isPrimaryVariant param here is silently ignored.
 
   return sdk.ownListings
     .query(params)

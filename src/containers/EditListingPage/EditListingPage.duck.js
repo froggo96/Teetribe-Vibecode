@@ -17,7 +17,7 @@ import * as log from '../../util/log';
 import { parse } from '../../util/urlHelpers';
 import { isUserAuthorized } from '../../util/userHelpers';
 import { isBookingProcessAlias } from '../../transactions/transaction';
-import { LISTING_STATE_DRAFT } from '../../util/types';
+import { LISTING_STATE_DRAFT, LISTING_STATE_CLOSED } from '../../util/types';
 // Matches EditListingWizard/EditListingWizardTab.js's PRICING_AND_STOCK tab id. Duplicated as a
 // local literal (rather than imported) deliberately - a duck/redux module importing from a UI
 // component file created a circular import that crashed the production server bundle with a
@@ -351,9 +351,16 @@ const updateVariantCombinations = (
         .update({ id: siblingId, price, ...sharedRest }, { expand: true })
         .then(response => {
           const siblingState = response?.data?.data?.attributes?.state;
-          return isPrimaryPublished && siblingState === LISTING_STATE_DRAFT
-            ? sdk.ownListings.publishDraft({ id: siblingId }, { expand: true })
-            : Promise.resolve();
+          // A combination the seller currently wants (it's still checked, hence being saved
+          // here) should always end up in the same state as the primary - self-heals siblings
+          // left in draft or wrongly closed by an earlier partially-failed save.
+          if (isPrimaryPublished && siblingState === LISTING_STATE_DRAFT) {
+            return sdk.ownListings.publishDraft({ id: siblingId }, { expand: true });
+          }
+          if (isPrimaryPublished && siblingState === LISTING_STATE_CLOSED) {
+            return sdk.ownListings.open({ id: siblingId }, { expand: true });
+          }
+          return Promise.resolve();
         })
         .then(() => updateStockOfListingMaybe(siblingId, combo.stockUpdate, dispatch))
         .then(() => siblingId)
