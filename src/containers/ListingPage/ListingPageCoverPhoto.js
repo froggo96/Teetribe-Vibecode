@@ -166,6 +166,20 @@ export const ListingPageComponent = props => {
   const isVariantCombinationUnavailable =
     hasVariantCombos && isSelectionComplete && !resolvedVariantListing;
 
+  // Per-color photos live on sibling listings (one copy per sibling, since an image belongs
+  // to exactly one listing). When the buyer picks a color, show that color's photo instead of
+  // the primary's gallery, if any sibling of that color carries one.
+  const selectedColorImageListing =
+    hasVariantCombos && variantSelection.color
+      ? variantCombos.find(
+          c =>
+            c.color === variantSelection.color &&
+            c.listing?.id?.uuid !== currentListing?.id?.uuid &&
+            c.listing?.images?.length > 0
+        )?.listing
+      : null;
+  const galleryListing = selectedColorImageListing || currentListing;
+
   const topbar = <TopbarContainer />;
 
   if (showListingError && showListingError.status === 404) {
@@ -310,8 +324,9 @@ export const ListingPageComponent = props => {
       <LayoutSingleColumn className={css.pageRoot} topbar={topbar} footer={<FooterContainer />}>
         {showListingImage ? (
           <SectionHero
+            key={galleryListing.id.uuid}
             title={title}
-            listing={currentListing}
+            listing={galleryListing}
             isOwnListing={isOwnListing}
             imageCarouselOpen={imageCarouselOpen}
             onImageCarouselClose={() => setImageCarouselOpen(false)}
@@ -382,6 +397,7 @@ export const ListingPageComponent = props => {
                   setShowVariantSelectionRequired(false);
                   setVariantSelection(selection);
                 }}
+                listingFieldsConfig={listingConfig.listingFields}
                 isUnavailable={isVariantCombinationUnavailable}
                 showSelectionRequired={showVariantSelectionRequired}
               />

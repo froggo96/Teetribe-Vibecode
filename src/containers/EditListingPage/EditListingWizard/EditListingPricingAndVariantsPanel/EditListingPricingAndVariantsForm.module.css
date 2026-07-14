@@ -44,6 +44,47 @@
   margin-bottom: 12px;
 }
 
+.colorImageRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.colorImagePreview {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.colorImagePlaceholder {
+  width: 64px;
+  height: 64px;
+  border: 1px dashed var(--colorGrey100);
+  border-radius: 4px;
+}
+
+.colorImageLabel {
+  flex-grow: 1;
+  font-weight: var(--fontWeightSemiBold);
+}
+
+.colorImageButton {
+  padding: 4px 12px;
+  border: 1px solid var(--colorGrey100);
+  border-radius: 4px;
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--colorGrey300);
+  }
+}
+
+.colorImageInput {
+  display: none;
+}
+
 .submitButton {
   margin-top: auto;
   margin-bottom: 24px;

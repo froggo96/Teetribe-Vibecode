@@ -83,6 +83,28 @@ export const buildVariantCombinations = selections => {
 export const variantComboKey = combo =>
   VARIANT_ATTRIBUTE_KEYS.map(key => combo?.[key] ?? '').join('|');
 
+/**
+ * Human-readable labels for a listing's variant attribute values, e.g. ['M', 'White'] for
+ * publicData { StyleFormat: 'medium', color: 'white' }. Falls back to the raw option value
+ * when the option is no longer in the field config.
+ *
+ * @param {Object} publicData a variant listing's publicData
+ * @param {Array} listingFields the marketplace's listing fields config
+ * @returns {Array<string>} labels for the attributes this listing has values for
+ */
+export const variantDisplayLabels = (publicData, listingFields) =>
+  VARIANT_ATTRIBUTE_KEYS.map(key => {
+    const configKey = VARIANT_ATTRIBUTE_CONFIG_KEY[key];
+    const value = publicData?.[configKey];
+    const field = (listingFields || []).find(f => f.key === configKey);
+    const label = field?.enumOptions?.find(o => o.option === value)?.label;
+    return value ? label || value : null;
+  }).filter(Boolean);
+
+// " (M / White)" - appended to sibling listing titles so the purchased variant shows up
+// everywhere the transacted listing's title is rendered (order page, checkout, inbox, emails).
+export const variantTitleSuffix = labels => (labels?.length ? ` (${labels.join(' / ')})` : '');
+
 export const isPrimaryVariantListing = listing =>
   listing?.attributes?.publicData?.[IS_PRIMARY_VARIANT_KEY] === true;
 

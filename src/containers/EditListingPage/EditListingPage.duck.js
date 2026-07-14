@@ -28,6 +28,8 @@ import {
   VARIANT_GROUP_ID_KEY,
   IS_PRIMARY_VARIANT_KEY,
   SIBLING_LISTING_IDS_KEY,
+  variantDisplayLabels,
+  variantTitleSuffix,
 } from '../../util/variantHelpers';
 
 import { addMarketplaceEntities, getMarketplaceEntities } from '../../ducks/marketplaceData.duck';
@@ -282,10 +284,11 @@ const sharedPublicDataOf = publicData => {
 // After a successful update of a variant-group's primary listing (any tab other than the
 // variants tab itself, e.g. details/delivery), replay the same update onto every sibling
 // listing so shared fields (title, description, category, ...) never drift apart.
-// IMPORTANT: images are never replayed - an image resource belongs to the listing it was first
-// attached to, and attaching it to another listing fails with 409 conflict. Sibling listings
-// carry no images of their own; buyers only ever see the primary listing's gallery.
-const propagateToVariantSiblings = (sdk, dispatch, ownListingUpdateValues, response) => {
+// IMPORTANT: the primary's images are never replayed - an image resource belongs to the listing
+// it was first attached to, and attaching it to another listing fails with 409 conflict.
+// Siblings carry their own optional per-color photo instead (see updateVariantCombinations).
+// Titles are special-cased too: siblings keep their variant suffix, e.g. "New title (M / White)".
+const propagateToVariantSiblings = (sdk, dispatch, ownListingUpdateValues, response, listingFields) => {
   const publicData = response?.data?.data?.attributes?.publicData || {};
   const isPrimary = publicData[IS_PRIMARY_VARIANT_KEY] === true;
   const siblingIdStrings = publicData[SIBLING_LISTING_IDS_KEY] || [];
@@ -294,18 +297,30 @@ const propagateToVariantSiblings = (sdk, dispatch, ownListingUpdateValues, respo
   if (!isPrimary || siblingIdStrings.length === 0 || !hasSharedUpdates) {
     return Promise.resolve();
   }
+  const hasTitle = typeof siblingSafeValues.title === 'string';
 
-  // Sequential on purpose: a burst of parallel calls across many siblings is prone to
-  // rate-limiting, which used to leave the group only partially updated.
-  return siblingIdStrings.reduce((chain, siblingIdString) => {
-    const siblingId = new UUID(siblingIdString);
-    return chain.then(() =>
-      sdk.ownListings
-        .update({ ...siblingSafeValues, id: siblingId }, { expand: true })
-        .then(r => dispatch(addMarketplaceEntities(r)))
-        .catch(e => log.error(e, 'propagate-to-variant-sibling-failed', { siblingId }))
-    );
-  }, Promise.resolve());
+  return sdk.ownListings
+    .query({ ids: siblingIdStrings.map(sid => new UUID(sid)) })
+    .then(queryResponse => {
+      const siblings = queryResponse.data.data;
+      // Sequential on purpose: a burst of parallel calls across many siblings is prone to
+      // rate-limiting, which used to leave the group only partially updated.
+      return siblings.reduce((chain, sibling) => {
+        const labels = variantDisplayLabels(sibling.attributes.publicData, listingFields);
+        const titleMaybe = hasTitle
+          ? { title: `${siblingSafeValues.title}${variantTitleSuffix(labels)}` }
+          : {};
+        return chain.then(() =>
+          sdk.ownListings
+            .update({ ...siblingSafeValues, ...titleMaybe, id: sibling.id }, { expand: true })
+            .then(r => dispatch(addMarketplaceEntities(r)))
+            .catch(e =>
+              log.error(e, 'propagate-to-variant-sibling-failed', { siblingId: sibling.id })
+            )
+        );
+      }, Promise.resolve());
+    })
+    .catch(e => log.error(e, 'query-variant-siblings-for-propagate-failed', {}));
 };
 
 // Handle a submit from the variants panel: update the primary listing with the combination
@@ -341,14 +356,38 @@ const updateVariantCombinations = (
       updateStockOfListingMaybe(id, primaryCombo.stockUpdate, dispatch).then(() => response)
     );
 
+  // Sibling titles carry the variant, e.g. "Plain t-shirts (M / White)" - it's the transacted
+  // listing's title, so this is what surfaces the purchased variant on order pages, checkout,
+  // inbox and notification emails.
+  const siblingTitleFor = combo => {
+    const labels = [combo.sizeLabel || combo.size, combo.colorLabel || combo.color].filter(
+      Boolean
+    );
+    return `${primaryEntity?.attributes?.title}${variantTitleSuffix(labels)}`;
+  };
+
+  // A newly picked per-color photo is uploaded once per sibling of that color: an image
+  // resource can only be attached to one listing, so each sibling needs its own copy.
+  const uploadColorImageMaybe = combo =>
+    combo.newColorImageFile
+      ? sdk.images
+          .upload({ image: combo.newColorImageFile })
+          .then(r => ({ images: [r.data.data.id] }))
+      : Promise.resolve({});
+
   // Resolves to the sibling's listing id once it's fully up to date. Existing siblings that
   // are somehow still drafts while the primary is published (e.g. an earlier partially-failed
   // save) are published here too, so the whole group self-heals on the next save.
   const createOrUpdateSibling = combo => {
     if (combo.existingListingId) {
       const siblingId = combo.existingListingId;
-      return sdk.ownListings
-        .update({ id: siblingId, price, ...sharedRest }, { expand: true })
+      return uploadColorImageMaybe(combo)
+        .then(imagesMaybe =>
+          sdk.ownListings.update(
+            { id: siblingId, title: siblingTitleFor(combo), price, ...sharedRest, ...imagesMaybe },
+            { expand: true }
+          )
+        )
         .then(response => {
           const siblingState = response?.data?.data?.attributes?.state;
           // A combination the seller currently wants (it's still checked, hence being saved
@@ -370,15 +409,18 @@ const updateVariantCombinations = (
         });
     }
 
-    return sdk.ownListings
-      .createDraft(
-        {
-          title: primaryEntity?.attributes?.title,
-          price,
-          ...sharedRest,
-          publicData: publicDataFor(combo),
-        },
-        { expand: true, ...queryParams }
+    return uploadColorImageMaybe(combo)
+      .then(imagesMaybe =>
+        sdk.ownListings.createDraft(
+          {
+            title: siblingTitleFor(combo),
+            price,
+            ...sharedRest,
+            ...imagesMaybe,
+            publicData: publicDataFor(combo),
+          },
+          { expand: true, ...queryParams }
+        )
       )
       .then(response => {
         const siblingId = response.data.data.id;
@@ -503,7 +545,13 @@ export const updateListingThunk = createAsyncThunk(
         // fields (title, description, images, category, ...) in sync with the primary.
         const propagateMaybe =
           tab !== PRICING_AND_STOCK_TAB
-            ? propagateToVariantSiblings(sdk, dispatch, ownListingUpdateValues, response)
+            ? propagateToVariantSiblings(
+                sdk,
+                dispatch,
+                ownListingUpdateValues,
+                response,
+                config.listing.listingFields
+              )
             : Promise.resolve();
 
         return propagateMaybe.then(() => ({ response, tab }));

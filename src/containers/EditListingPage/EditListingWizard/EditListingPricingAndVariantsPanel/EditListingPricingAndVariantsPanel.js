@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import classNames from 'classnames';
 
 // Import configs and util modules
@@ -94,11 +94,31 @@ const EditListingPricingAndVariantsPanel = props => {
     existingCombos: existingCombosOf(props.listing, props.variantSiblings),
   });
 
+  // Sibling listings are fetched asynchronously (loadData doesn't await them), so they can land
+  // after this panel has mounted and snapshotted its combos. Without this refresh, a save made
+  // from that stale snapshot would treat every existing combination as new and create duplicate
+  // sibling listings. Only refresh while the snapshot has no sibling combos yet - once it does
+  // (or after the first save in this session), the snapshot is authoritative.
+  const siblingCount = props.variantSiblings?.length || 0;
+  useEffect(() => {
+    setState(prev => {
+      const hasSiblingCombos = prev.existingCombos.some(c => !c.isPrimary);
+      return hasSiblingCombos || siblingCount === 0
+        ? prev
+        : {
+            initialValues: getInitialValues(props.listing, props.variantSiblings),
+            existingCombos: existingCombosOf(props.listing, props.variantSiblings),
+          };
+    });
+  }, [siblingCount]);
+
   const {
     className,
     rootClassName,
     listing,
+    variantSiblings,
     listingFieldsConfig,
+    listingImageConfig,
     marketplaceCurrency,
     listingMinimumPriceSubUnits,
     listingTypes,
@@ -125,6 +145,21 @@ const EditListingPricingAndVariantsPanel = props => {
   const variantFields = pickVariantAttributeFields(listingFieldsConfig);
   const sizeFieldConfig = variantFields.find(f => f.key === VARIANT_ATTRIBUTE_CONFIG_KEY.size);
   const colorFieldConfig = variantFields.find(f => f.key === VARIANT_ATTRIBUTE_CONFIG_KEY.color);
+  const labelOf = (fieldConfig, value) =>
+    fieldConfig?.enumOptions?.find(o => o.option === value)?.label || value;
+
+  // Existing per-color photo (if any sibling of that color already carries one), for display
+  // in the form. Sibling images were fetched with the listing-card variants included.
+  const variantPrefix = listingImageConfig?.variantPrefix || 'listing-card';
+  const existingColorImages = (variantSiblings || []).reduce((acc, sibling) => {
+    const color = sibling.attributes?.publicData?.[VARIANT_ATTRIBUTE_CONFIG_KEY.color];
+    const imageVariants = sibling.images?.[0]?.attributes?.variants;
+    const url = imageVariants?.[variantPrefix]?.url || Object.values(imageVariants || {})[0]?.url;
+    if (color && url && !acc[color]) {
+      acc[color] = url;
+    }
+    return acc;
+  }, {});
 
   const isPublished = listing?.id && listing?.attributes?.state !== LISTING_STATE_DRAFT;
 
@@ -167,7 +202,13 @@ const EditListingPricingAndVariantsPanel = props => {
           className={css.form}
           initialValues={initialValues}
           onSubmit={values => {
-            const { price, sizeOptions = [], colorOptions = [], quantities = {} } = values;
+            const {
+              price,
+              sizeOptions = [],
+              colorOptions = [],
+              quantities = {},
+              colorImages = {},
+            } = values;
 
             // The combination currently assigned to this exact listing (the page being edited)
             // can't be removed here - it isn't a closeable sibling, it's this listing itself.
@@ -198,12 +239,20 @@ const EditListingPricingAndVariantsPanel = props => {
               const quantity = Number.parseInt(quantities[comboKey], 10) || 0;
               const hasNoCurrentStock = existing?.currentStock == null;
               const oldTotal = existing ? (hasNoCurrentStock ? null : existing.currentStock) : null;
+              const isPrimary = !!existing?.isPrimary;
 
               return {
                 ...combo,
-                isPrimary: !!existing?.isPrimary,
+                isPrimary,
                 existingListingId: existing ? existing.listingId : undefined,
                 stockUpdate: { oldTotal, newTotal: quantity },
+                // Human-readable labels, used to build sibling listing titles like
+                // "Plain t-shirts (M / White)" so the variant shows up on orders.
+                sizeLabel: combo.size ? labelOf(sizeFieldConfig, combo.size) : null,
+                colorLabel: combo.color ? labelOf(colorFieldConfig, combo.color) : null,
+                // Per-color photo picked in this session, if any. Never attached to the
+                // primary listing - its gallery is managed on the Photos tab.
+                newColorImageFile: !isPrimary ? colorImages[combo.color]?.file || null : null,
               };
             });
 
@@ -237,6 +286,7 @@ const EditListingPricingAndVariantsPanel = props => {
           unitType={unitType}
           sizeFieldConfig={sizeFieldConfig}
           colorFieldConfig={colorFieldConfig}
+          existingColorImages={existingColorImages}
           saveActionMsg={submitButtonText}
           disabled={disabled}
           ready={ready}

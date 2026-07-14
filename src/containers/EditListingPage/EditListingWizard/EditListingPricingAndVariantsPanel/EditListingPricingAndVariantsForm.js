@@ -47,6 +47,51 @@ const getPriceValidators = (listingMinimumPriceSubUnits, marketplaceCurrency, in
 
 const optionsFor = enumOptions => (enumOptions || []).map(o => ({ key: o.option, label: o.label }));
 
+// One optional photo per color: shown on the listing page when the buyer picks the color, and
+// on their order. The picked File is uploaded (once per size-sibling of the color) at save time.
+const FieldColorImage = props => {
+  const { colorOption, colorLabel, existingImageUrl, formApi, values, intl } = props;
+  const picked = values?.colorImages?.[colorOption];
+  const previewUrl = picked?.previewUrl || existingImageUrl;
+  const inputId = `colorImage.${colorOption}`;
+
+  const onChange = event => {
+    const file = event.target.files?.[0];
+    if (file) {
+      formApi.change(`colorImages.${colorOption}`, {
+        file,
+        previewUrl: URL.createObjectURL(file),
+      });
+    }
+    event.target.value = null;
+  };
+
+  return (
+    <div className={css.colorImageRow}>
+      {previewUrl ? (
+        <img className={css.colorImagePreview} src={previewUrl} alt={colorLabel} />
+      ) : (
+        <div className={css.colorImagePlaceholder} />
+      )}
+      <span className={css.colorImageLabel}>{colorLabel}</span>
+      <label htmlFor={inputId} className={css.colorImageButton}>
+        {intl.formatMessage({
+          id: previewUrl
+            ? 'EditListingPricingAndVariantsForm.replacePhoto'
+            : 'EditListingPricingAndVariantsForm.addPhoto',
+        })}
+      </label>
+      <input
+        id={inputId}
+        type="file"
+        accept="image/*"
+        onChange={onChange}
+        className={css.colorImageInput}
+      />
+    </div>
+  );
+};
+
 /**
  * The EditListingPricingAndVariantsForm component.
  *
@@ -86,10 +131,12 @@ export const EditListingPricingAndVariantsForm = props => (
         listingMinimumPriceSubUnits = 0,
         sizeFieldConfig,
         colorFieldConfig,
+        existingColorImages = {},
         saveActionMsg,
         updated,
         updateInProgress,
         fetchErrors,
+        form: formApi,
         values,
       } = formRenderProps;
 
@@ -102,6 +149,8 @@ export const EditListingPricingAndVariantsForm = props => (
 
       const sizeOptions = optionsFor(sizeFieldConfig?.enumOptions);
       const colorOptions = optionsFor(colorFieldConfig?.enumOptions);
+      const sizeLabelFor = value => sizeOptions.find(o => o.key === value)?.label || value;
+      const colorLabelFor = value => colorOptions.find(o => o.key === value)?.label || value;
 
       const selectedSizes = values.sizeOptions || [];
       const selectedColors = values.colorOptions || [];
@@ -167,6 +216,29 @@ export const EditListingPricingAndVariantsForm = props => (
             </div>
           ) : null}
 
+          {selectedColors.length > 0 ? (
+            <div className={css.input}>
+              <FormattedMessage
+                id="EditListingPricingAndVariantsForm.colorPhotosLabel"
+                tagName="h4"
+              />
+              <p className={css.hint}>
+                <FormattedMessage id="EditListingPricingAndVariantsForm.colorPhotosHint" />
+              </p>
+              {selectedColors.map(colorOption => (
+                <FieldColorImage
+                  key={colorOption}
+                  colorOption={colorOption}
+                  colorLabel={colorLabelFor(colorOption)}
+                  existingImageUrl={existingColorImages[colorOption]}
+                  formApi={formApi}
+                  values={values}
+                  intl={intl}
+                />
+              ))}
+            </div>
+          ) : null}
+
           {!hasCombinations ? (
             <p className={css.hint}>
               <FormattedMessage id="EditListingPricingAndVariantsForm.selectAtLeastOne" />
@@ -176,7 +248,12 @@ export const EditListingPricingAndVariantsForm = props => (
               <FormattedMessage id="EditListingPricingAndVariantsForm.quantitiesLabel" tagName="h4" />
               {combinations.map(combo => {
                 const comboKey = variantComboKey(combo);
-                const comboLabel = [combo.size, combo.color].filter(Boolean).join(' / ');
+                const comboLabel = [
+                  combo.size ? sizeLabelFor(combo.size) : null,
+                  combo.color ? colorLabelFor(combo.color) : null,
+                ]
+                  .filter(Boolean)
+                  .join(' / ');
                 return (
                   <FieldTextInput
                     key={comboKey}

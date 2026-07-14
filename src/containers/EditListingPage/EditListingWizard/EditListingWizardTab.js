@@ -217,6 +217,7 @@ const EditListingWizardTab = props => {
           marketplaceCurrency={config.currency}
           listingMinimumPriceSubUnits={config.listingMinimumPriceSubUnits}
           listingFieldsConfig={config.listing.listingFields}
+          listingImageConfig={config.layout.listingImage}
           variantSiblings={variantSiblings}
         />
       ) : (

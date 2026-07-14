@@ -150,7 +150,16 @@ const showVariantSiblingsPayloadCreator = (
       ids: siblingIds.map(sid => new UUID(sid)),
       // author is included because checkout reads it off the selected variant listing
       include: ['author', 'images', 'currentStock'],
-      'fields.image': [`variants.${variantPrefix}`, `variants.${variantPrefix}-2x`],
+      // scaled variants are needed because the gallery swaps to a sibling's own per-color
+      // photo when the buyer selects that color
+      'fields.image': [
+        'variants.scaled-small',
+        'variants.scaled-medium',
+        'variants.scaled-large',
+        'variants.scaled-xlarge',
+        `variants.${variantPrefix}`,
+        `variants.${variantPrefix}-2x`,
+      ],
       ...createImageVariantConfig(`${variantPrefix}`, 400, aspectRatio),
       ...createImageVariantConfig(`${variantPrefix}-2x`, 800, aspectRatio),
     })
