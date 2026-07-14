@@ -329,7 +329,6 @@
   "EditListingPricingAndVariantsForm.pricePerProduct": "Price",
   "EditListingPricingAndVariantsForm.priceRequired": "You need to add a valid price.",
   "EditListingPricingAndVariantsForm.priceTooLow": "Price should be at least {minPrice}.",
-  "EditListingPricingAndVariantsForm.primaryColorPhotoHint": "Uses the listing photos (see the Photos tab).",
   "EditListingPricingAndVariantsForm.quantitiesLabel": "Quantity per combination",
   "EditListingPricingAndVariantsForm.replacePhoto": "Replace photo",
   "EditListingPricingAndVariantsForm.selectAtLeastOne": "Select at least one size or color to set quantities.",

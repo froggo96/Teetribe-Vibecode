@@ -11,6 +11,7 @@ import {
   buildVariantCombinations,
   variantComboKey,
   VARIANT_ATTRIBUTE_CONFIG_KEY,
+  PRIMARY_VARIANT_IMAGE_KEY,
 } from '../../../../util/variantHelpers';
 
 // Import shared components
@@ -163,13 +164,20 @@ const EditListingPricingAndVariantsPanel = props => {
     }
     return acc;
   }, {});
-  // The primary listing's own color is covered by the main gallery (Photos tab) - seed it so
-  // the form can show that instead of a dead upload slot; sibling photos take precedence.
+  // The primary's own color photo lives in its gallery, marked by publicData.variantImageId
+  // (which may dangle if that image was removed on the Photos tab - hence the existence check).
   const primaryCombo = existingCombos.find(c => c.isPrimary);
   const primaryColor = primaryCombo?.color;
-  const primaryImageUrl = firstImageUrlOf(listing);
+  const primaryVariantImageId =
+    listing?.attributes?.publicData?.[PRIMARY_VARIANT_IMAGE_KEY];
+  const primaryVariantImage = (listing?.images || []).find(
+    img => img.id?.uuid === primaryVariantImageId
+  );
+  const primaryVariantImageUrl =
+    primaryVariantImage?.attributes?.variants?.[variantPrefix]?.url ||
+    Object.values(primaryVariantImage?.attributes?.variants || {})[0]?.url;
   const existingColorImages = {
-    ...(primaryColor && primaryImageUrl ? { [primaryColor]: primaryImageUrl } : {}),
+    ...(primaryColor && primaryVariantImageUrl ? { [primaryColor]: primaryVariantImageUrl } : {}),
     ...siblingColorImages,
   };
 
@@ -262,9 +270,10 @@ const EditListingPricingAndVariantsPanel = props => {
                 // "Plain t-shirts (M / White)" so the variant shows up on orders.
                 sizeLabel: combo.size ? labelOf(sizeFieldConfig, combo.size) : null,
                 colorLabel: combo.color ? labelOf(colorFieldConfig, combo.color) : null,
-                // Per-color photo picked in this session, if any. Never attached to the
-                // primary listing - its gallery is managed on the Photos tab.
-                newColorImageFile: !isPrimary ? colorImages[combo.color]?.file || null : null,
+                // Per-color photo picked in this session, if any. Siblings get it attached as
+                // their own image; for the primary combo it's appended to the gallery and
+                // tracked via publicData.variantImageId (see EditListingPage.duck.js).
+                newColorImageFile: colorImages[combo.color]?.file || null,
               };
             });
 
@@ -299,7 +308,6 @@ const EditListingPricingAndVariantsPanel = props => {
           sizeFieldConfig={sizeFieldConfig}
           colorFieldConfig={colorFieldConfig}
           existingColorImages={existingColorImages}
-          primaryCombo={primaryCombo}
           saveActionMsg={submitButtonText}
           disabled={disabled}
           ready={ready}

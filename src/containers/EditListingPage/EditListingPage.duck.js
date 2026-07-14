@@ -28,6 +28,8 @@ import {
   VARIANT_GROUP_ID_KEY,
   IS_PRIMARY_VARIANT_KEY,
   SIBLING_LISTING_IDS_KEY,
+  PRIMARY_VARIANT_IMAGE_KEY,
+  MANAGED_VARIANT_KEYS,
   variantDisplayLabels,
   variantTitleSuffix,
 } from '../../util/variantHelpers';
@@ -269,15 +271,11 @@ export const requestCreateListingDraft = (data, config) => (dispatch, getState, 
 
 // Every non-variant public data key, i.e. everything that must be identical across all sibling
 // listings of the same product (category, delivery method, other custom listing fields, etc).
+// MANAGED_VARIANT_KEYS is the single source of truth for what must NOT be copied across the
+// group (per-combination attributes and primary-only bookkeeping like variantImageId).
 const sharedPublicDataOf = publicData => {
-  const excludedKeys = [
-    ...Object.values(VARIANT_ATTRIBUTE_CONFIG_KEY),
-    VARIANT_GROUP_ID_KEY,
-    IS_PRIMARY_VARIANT_KEY,
-    SIBLING_LISTING_IDS_KEY,
-  ];
   return Object.fromEntries(
-    Object.entries(publicData || {}).filter(([key]) => !excludedKeys.includes(key))
+    Object.entries(publicData || {}).filter(([key]) => !MANAGED_VARIANT_KEYS.includes(key))
   );
 };
 
@@ -350,11 +348,41 @@ const updateVariantCombinations = (
     [VARIANT_ATTRIBUTE_CONFIG_KEY.color]: combo.color,
   });
 
-  const updatePrimary = sdk.ownListings
-    .update({ id, price, ...sharedRest, publicData: publicDataFor(primaryCombo) }, queryParams)
-    .then(response =>
-      updateStockOfListingMaybe(id, primaryCombo.stockUpdate, dispatch).then(() => response)
-    );
+  // The primary's own color can have a variant photo too, but an image can't live detached
+  // from its listing - so the photo is appended to the primary's gallery images and its id is
+  // tracked in publicData.variantImageId. Replacing swaps out the previously tracked image.
+  const updatePrimary = (primaryCombo?.newColorImageFile
+    ? sdk.images.upload({ image: primaryCombo.newColorImageFile }).then(r => r.data.data.id)
+    : Promise.resolve(null)
+  )
+    .then(newImageId => {
+      const oldVariantImageId = primaryEntity?.attributes?.publicData?.[PRIMARY_VARIANT_IMAGE_KEY];
+      const currentImageIds = (primaryEntity?.relationships?.images?.data || []).map(
+        ref => ref.id
+      );
+      const imagesMaybe = newImageId
+        ? { images: [...currentImageIds.filter(iid => iid.uuid !== oldVariantImageId), newImageId] }
+        : {};
+      const variantImageIdMaybe = newImageId
+        ? { [PRIMARY_VARIANT_IMAGE_KEY]: newImageId.uuid }
+        : {};
+      return sdk.ownListings.update(
+        {
+          id,
+          price,
+          ...sharedRest,
+          ...imagesMaybe,
+          publicData: { ...publicDataFor(primaryCombo), ...variantImageIdMaybe },
+        },
+        queryParams
+      );
+    })
+    .then(response => {
+      dispatch(addMarketplaceEntities(response));
+      return updateStockOfListingMaybe(id, primaryCombo.stockUpdate, dispatch).then(
+        () => response
+      );
+    });
 
   // Sibling titles carry the variant, e.g. "Plain t-shirts (M / White)" - it's the transacted
   // listing's title, so this is what surfaces the purchased variant on order pages, checkout,

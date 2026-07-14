@@ -35,6 +35,11 @@ export const IS_PRIMARY_VARIANT_KEY = 'isPrimaryVariant';
 // id (`sdk.listings.query({ ids: [...] })`), not by searching for a matching variantGroupId, so
 // no search index needs to be configured for grouping to work.
 export const SIBLING_LISTING_IDS_KEY = 'siblingListingIds';
+// Stored only on the primary listing: the image id of its own color's variant photo. The photo
+// physically lives in the primary's gallery images (an image can't exist detached from its
+// listing), so this key marks WHICH gallery image is the color photo. May dangle if the seller
+// removes that image on the Photos tab - readers must verify the id still exists in images.
+export const PRIMARY_VARIANT_IMAGE_KEY = 'variantImageId';
 
 // Every publicData key this feature manages itself, end to end - none of these should ever be
 // rendered or saved by the generic single-value listing-fields UI (Details tab), even if the
@@ -44,6 +49,7 @@ export const MANAGED_VARIANT_KEYS = [
   VARIANT_GROUP_ID_KEY,
   IS_PRIMARY_VARIANT_KEY,
   SIBLING_LISTING_IDS_KEY,
+  PRIMARY_VARIANT_IMAGE_KEY,
 ];
 
 export const hasVariants = listingTypeConfig => {

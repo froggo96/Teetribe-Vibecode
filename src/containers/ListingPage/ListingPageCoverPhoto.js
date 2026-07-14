@@ -10,6 +10,7 @@ import { OFFER, REQUEST } from '../../transactions/transaction';
 
 // Global ducks (for Redux actions and thunks)
 import { getMarketplaceEntities } from '../../ducks/marketplaceData.duck';
+import { PRIMARY_VARIANT_IMAGE_KEY } from '../../util/variantHelpers';
 import { manageDisableScrolling, isScrollingDisabled } from '../../ducks/ui.duck';
 import { initializeCardPaymentData } from '../../ducks/stripe.duck.js';
 
@@ -166,19 +167,44 @@ export const ListingPageComponent = props => {
   const isVariantCombinationUnavailable =
     hasVariantCombos && isSelectionComplete && !resolvedVariantListing;
 
-  // Per-color photos live on sibling listings (one copy per sibling, since an image belongs
-  // to exactly one listing). When the buyer picks a color, show that color's photo instead of
-  // the primary's gallery, if any sibling of that color carries one.
-  const selectedColorImageListing =
-    hasVariantCombos && variantSelection.color
-      ? variantCombos.find(
-          c =>
-            c.color === variantSelection.color &&
-            c.listing?.id?.uuid !== currentListing?.id?.uuid &&
-            c.listing?.images?.length > 0
-        )?.listing
-      : null;
-  const galleryListing = selectedColorImageListing || currentListing;
+  // The gallery shows the main photos plus one photo per color: a sibling's own image, or -
+  // for the primary's color - the gallery image tracked by publicData.variantImageId. When a
+  // color is selected, its photo moves to the front of the carousel.
+  const primaryVariantImageId = publicData?.[PRIMARY_VARIANT_IMAGE_KEY];
+  const colorImageByColor = {};
+  variantCombos.forEach(c => {
+    const isSibling = c.listing?.id?.uuid !== currentListing?.id?.uuid;
+    if (!c.color || colorImageByColor[c.color]) {
+      return;
+    }
+    if (isSibling && c.listing?.images?.length > 0) {
+      colorImageByColor[c.color] = c.listing.images[0];
+    } else if (!isSibling && primaryVariantImageId) {
+      const tracked = (currentListing.images || []).find(
+        img => img.id?.uuid === primaryVariantImageId
+      );
+      if (tracked) {
+        colorImageByColor[c.color] = tracked;
+      }
+    }
+  });
+  const baseImages = currentListing.images || [];
+  const extraColorImages = Object.values(colorImageByColor).filter(
+    img => !baseImages.some(b => b.id?.uuid === img.id?.uuid)
+  );
+  const mergedImages = [...baseImages, ...extraColorImages];
+  const selectedColorImage = variantSelection.color
+    ? colorImageByColor[variantSelection.color]
+    : null;
+  const galleryImages = selectedColorImage
+    ? [
+        selectedColorImage,
+        ...mergedImages.filter(img => img.id?.uuid !== selectedColorImage.id?.uuid),
+      ]
+    : mergedImages;
+  const galleryListing = hasVariantCombos
+    ? { ...currentListing, images: galleryImages }
+    : currentListing;
 
   const topbar = <TopbarContainer />;
 
@@ -324,7 +350,7 @@ export const ListingPageComponent = props => {
       <LayoutSingleColumn className={css.pageRoot} topbar={topbar} footer={<FooterContainer />}>
         {showListingImage ? (
           <SectionHero
-            key={galleryListing.id.uuid}
+            key={`hero-${variantSelection.color || 'all'}`}
             title={title}
             listing={galleryListing}
             isOwnListing={isOwnListing}

@@ -50,7 +50,7 @@ const optionsFor = enumOptions => (enumOptions || []).map(o => ({ key: o.option,
 // One optional photo per color: shown on the listing page when the buyer picks the color, and
 // on their order. The picked File is uploaded (once per size-sibling of the color) at save time.
 const FieldColorImage = props => {
-  const { colorOption, colorLabel, existingImageUrl, uploadDisabled, formApi, values, intl } = props;
+  const { colorOption, colorLabel, existingImageUrl, formApi, values, intl } = props;
   const picked = values?.colorImages?.[colorOption];
   const previewUrl = picked?.previewUrl || existingImageUrl;
   const inputId = `colorImage.${colorOption}`;
@@ -74,28 +74,20 @@ const FieldColorImage = props => {
         <div className={css.colorImagePlaceholder} />
       )}
       <span className={css.colorImageLabel}>{colorLabel}</span>
-      {uploadDisabled ? (
-        <span className={css.hint}>
-          {intl.formatMessage({ id: 'EditListingPricingAndVariantsForm.primaryColorPhotoHint' })}
-        </span>
-      ) : (
-        <>
-          <label htmlFor={inputId} className={css.colorImageButton}>
-            {intl.formatMessage({
-              id: previewUrl
-                ? 'EditListingPricingAndVariantsForm.replacePhoto'
-                : 'EditListingPricingAndVariantsForm.addPhoto',
-            })}
-          </label>
-          <input
-            id={inputId}
-            type="file"
-            accept="image/*"
-            onChange={onChange}
-            className={css.colorImageInput}
-          />
-        </>
-      )}
+      <label htmlFor={inputId} className={css.colorImageButton}>
+        {intl.formatMessage({
+          id: previewUrl
+            ? 'EditListingPricingAndVariantsForm.replacePhoto'
+            : 'EditListingPricingAndVariantsForm.addPhoto',
+        })}
+      </label>
+      <input
+        id={inputId}
+        type="file"
+        accept="image/*"
+        onChange={onChange}
+        className={css.colorImageInput}
+      />
     </div>
   );
 };
@@ -140,7 +132,6 @@ export const EditListingPricingAndVariantsForm = props => (
         sizeFieldConfig,
         colorFieldConfig,
         existingColorImages = {},
-        primaryCombo,
         saveActionMsg,
         updated,
         updateInProgress,
@@ -168,19 +159,6 @@ export const EditListingPricingAndVariantsForm = props => (
         ? buildVariantCombinations({ size: selectedSizes, color: selectedColors })
         : [];
 
-      // Per-color photos attach to sibling listings only, never to the primary (its gallery
-      // lives on the Photos tab). A color whose only combination IS the primary has nowhere
-      // to put an upload - hide the button for it instead of dropping the file silently.
-      const primaryComboKey = primaryCombo ? variantComboKey(primaryCombo) : null;
-      const isUploadableColor = colorOption => {
-        if (!primaryComboKey) {
-          return true;
-        }
-        const sizesOrNone = selectedSizes.length > 0 ? selectedSizes : [undefined];
-        return sizesOrNone.some(
-          size => variantComboKey({ size, color: colorOption }) !== primaryComboKey
-        );
-      };
 
       const classes = classNames(rootClassName || css.root, className);
       const submitReady = (updated && pristine) || ready;
@@ -254,7 +232,6 @@ export const EditListingPricingAndVariantsForm = props => (
                   colorOption={colorOption}
                   colorLabel={colorLabelFor(colorOption)}
                   existingImageUrl={existingColorImages[colorOption]}
-                  uploadDisabled={!isUploadableColor(colorOption)}
                   formApi={formApi}
                   values={values}
                   intl={intl}
