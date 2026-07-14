@@ -452,10 +452,41 @@ const updateVariantCombinations = (
     processSiblingsSequentially(otherCombos).then(siblingIds => {
       // Every combination's listing id is now known - record them on the primary so it can
       // always find its siblings again with a direct `ids` lookup (no search index needed).
-      return sdk.ownListings.update(
-        { id, publicData: { [SIBLING_LISTING_IDS_KEY]: siblingIds.map(sid => sid.uuid) } },
-        queryParams
-      );
+      const keptIdStrings = [id.uuid, ...siblingIds.map(sid => sid.uuid)];
+      return sdk.ownListings
+        .update(
+          { id, publicData: { [SIBLING_LISTING_IDS_KEY]: siblingIds.map(sid => sid.uuid) } },
+          queryParams
+        )
+        .then(stampResponse =>
+          // Orphan sweep: a partially-failed save can leave stray sibling listings that
+          // back-reference this group but are no longer tracked in siblingListingIds -
+          // published duplicates of a combo that confuse stock. Close any such stray.
+          // (own_listings/query can't filter by publicData, so filter client-side.)
+          sdk.ownListings
+            .query({ perPage: 100 })
+            .then(all => {
+              const orphans = all.data.data.filter(
+                l =>
+                  l.attributes.publicData?.[VARIANT_GROUP_ID_KEY] === id.uuid &&
+                  !keptIdStrings.includes(l.id.uuid) &&
+                  l.attributes.state !== LISTING_STATE_CLOSED
+              );
+              return orphans.reduce(
+                (chain, orphan) =>
+                  chain.then(() =>
+                    sdk.ownListings
+                      .close({ id: orphan.id }, { expand: true })
+                      .catch(e =>
+                        log.error(e, 'close-orphan-variant-failed', { siblingId: orphan.id })
+                      )
+                  ),
+                Promise.resolve()
+              );
+            })
+            .catch(e => log.error(e, 'orphan-variant-sweep-failed', {}))
+            .then(() => stampResponse)
+        );
     })
   );
 };
