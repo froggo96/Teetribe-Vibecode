@@ -11,6 +11,7 @@ import { propTypes } from '../../util/types';
 import { ensureTransaction } from '../../util/data';
 import { createSlug } from '../../util/urlHelpers';
 import { isTransactionInitiateListingNotFoundError } from '../../util/errors';
+import { variantDisplayLabels } from '../../util/variantHelpers';
 import {
   getProcess,
   isBookingProcessAlias,
@@ -462,7 +463,15 @@ export const CheckoutPageWithPayment = props => {
       : speculatedTransaction;
   const timeZone = listing?.attributes?.availabilityPlan?.timezone;
   const transactionProcessAlias = listing?.attributes?.publicData?.transactionProcessAlias;
-  const priceVariantName = tx.attributes.protectedData?.priceVariantName;
+  // For product variants the transacted listing is one specific size/color combination -
+  // surface it above the order breakdown, reusing the booking price-variant slot.
+  const variantLabels = variantDisplayLabels(
+    listing?.attributes?.publicData,
+    config.listing.listingFields
+  );
+  const priceVariantName =
+    tx.attributes.protectedData?.priceVariantName ||
+    (variantLabels.length ? variantLabels.join(' / ') : null);
 
   const txBookingMaybe = tx?.booking?.id ? { booking: tx.booking, timeZone } : {};
 

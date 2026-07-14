@@ -6,6 +6,7 @@ import { propTypes } from '../../../util/types';
 import { userDisplayNameAsString } from '../../../util/data';
 import { createSlug } from '../../../util/urlHelpers';
 import { displayPrice } from '../../../util/configHelpers';
+import { variantDisplayLabels } from '../../../util/variantHelpers';
 
 import { AvatarLarge, NamedLink, UserDisplayName } from '../../../components';
 
@@ -174,7 +175,14 @@ export class TransactionPanelComponent extends Component {
     const showDetailCardHeadings = stateData.showDetailCardHeadings || !hasViewingRights;
 
     const deliveryMethod = protectedData?.deliveryMethod || 'none';
-    const priceVariantName = protectedData?.priceVariantName;
+    // For product variants the transacted listing is one specific size/color combination -
+    // surface it above the order breakdown, reusing the booking price-variant slot.
+    const variantLabels = variantDisplayLabels(
+      listing?.attributes?.publicData,
+      config.listing.listingFields
+    );
+    const priceVariantName =
+      protectedData?.priceVariantName || (variantLabels.length ? variantLabels.join(' / ') : null);
 
     const classes = classNames(rootClassName || css.root, className);
 
