@@ -385,10 +385,13 @@ const updateVariantCombinations = (
         .then(imagesMaybe =>
           sdk.ownListings.update(
             { id: siblingId, title: siblingTitleFor(combo), price, ...sharedRest, ...imagesMaybe },
-            { expand: true }
+            queryParams
           )
         )
         .then(response => {
+          // Keep the store's sibling entity fresh (incl. its image), so the variants panel
+          // still shows the per-color photo right after saving.
+          dispatch(addMarketplaceEntities(response));
           const siblingState = response?.data?.data?.attributes?.state;
           // A combination the seller currently wants (it's still checked, hence being saved
           // here) should always end up in the same state as the primary - self-heals siblings
@@ -423,6 +426,7 @@ const updateVariantCombinations = (
         )
       )
       .then(response => {
+        dispatch(addMarketplaceEntities(response));
         const siblingId = response.data.data.id;
         return updateStockOfListingMaybe(siblingId, combo.stockUpdate, dispatch)
           .then(() =>

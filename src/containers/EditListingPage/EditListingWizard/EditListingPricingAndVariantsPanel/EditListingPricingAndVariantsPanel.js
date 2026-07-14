@@ -151,15 +151,27 @@ const EditListingPricingAndVariantsPanel = props => {
   // Existing per-color photo (if any sibling of that color already carries one), for display
   // in the form. Sibling images were fetched with the listing-card variants included.
   const variantPrefix = listingImageConfig?.variantPrefix || 'listing-card';
-  const existingColorImages = (variantSiblings || []).reduce((acc, sibling) => {
+  const firstImageUrlOf = l => {
+    const imageVariants = l?.images?.[0]?.attributes?.variants;
+    return imageVariants?.[variantPrefix]?.url || Object.values(imageVariants || {})[0]?.url;
+  };
+  const siblingColorImages = (variantSiblings || []).reduce((acc, sibling) => {
     const color = sibling.attributes?.publicData?.[VARIANT_ATTRIBUTE_CONFIG_KEY.color];
-    const imageVariants = sibling.images?.[0]?.attributes?.variants;
-    const url = imageVariants?.[variantPrefix]?.url || Object.values(imageVariants || {})[0]?.url;
+    const url = firstImageUrlOf(sibling);
     if (color && url && !acc[color]) {
       acc[color] = url;
     }
     return acc;
   }, {});
+  // The primary listing's own color is covered by the main gallery (Photos tab) - seed it so
+  // the form can show that instead of a dead upload slot; sibling photos take precedence.
+  const primaryCombo = existingCombos.find(c => c.isPrimary);
+  const primaryColor = primaryCombo?.color;
+  const primaryImageUrl = firstImageUrlOf(listing);
+  const existingColorImages = {
+    ...(primaryColor && primaryImageUrl ? { [primaryColor]: primaryImageUrl } : {}),
+    ...siblingColorImages,
+  };
 
   const isPublished = listing?.id && listing?.attributes?.state !== LISTING_STATE_DRAFT;
 
@@ -287,6 +299,7 @@ const EditListingPricingAndVariantsPanel = props => {
           sizeFieldConfig={sizeFieldConfig}
           colorFieldConfig={colorFieldConfig}
           existingColorImages={existingColorImages}
+          primaryCombo={primaryCombo}
           saveActionMsg={submitButtonText}
           disabled={disabled}
           ready={ready}
