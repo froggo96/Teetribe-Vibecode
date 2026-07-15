@@ -152,13 +152,17 @@ export const EditListingPricingAndVariantsForm = props => (
       const sizeLabelFor = value => sizeOptions.find(o => o.key === value)?.label || value;
       const colorLabelFor = value => colorOptions.find(o => o.key === value)?.label || value;
 
-      const selectedSizes = values.sizeOptions || [];
+      // When colors are configured, sizes are picked per color (values.sizesByColor.<color>),
+      // so each color can have its own size subset (e.g. Green: S/M/L, White: M/L/XL) instead of
+      // every color getting the full cross-product of every selected size.
+      const hasColorOptions = colorOptions.length > 0;
       const selectedColors = values.colorOptions || [];
-      const hasCombinations = selectedSizes.length > 0 || selectedColors.length > 0;
-      const combinations = hasCombinations
-        ? buildVariantCombinations({ size: selectedSizes, color: selectedColors })
-        : [];
-
+      const sizesByColor = values.sizesByColor || {};
+      const selectedSizes = values.sizeOptions || [];
+      const combinations = hasColorOptions
+        ? selectedColors.flatMap(color => (sizesByColor[color] || []).map(size => ({ size, color })))
+        : buildVariantCombinations({ size: selectedSizes });
+      const hasCombinations = combinations.length > 0;
 
       const classes = classNames(rootClassName || css.root, className);
       const submitReady = (updated && pristine) || ready;
@@ -195,92 +199,136 @@ export const EditListingPricingAndVariantsForm = props => (
             validate={priceValidators}
           />
 
-          {sizeOptions.length > 0 ? (
-            <div className={css.input}>
-              <FieldCheckboxGroup
-                id={`${formId}.sizeOptions`}
-                name="sizeOptions"
-                label={intl.formatMessage({ id: 'EditListingPricingAndVariantsForm.sizesLabel' })}
-                options={sizeOptions}
-              />
-            </div>
-          ) : null}
-
-          {colorOptions.length > 0 ? (
-            <div className={css.input}>
-              <FieldCheckboxGroup
-                id={`${formId}.colorOptions`}
-                name="colorOptions"
-                label={intl.formatMessage({ id: 'EditListingPricingAndVariantsForm.colorsLabel' })}
-                options={colorOptions}
-              />
-            </div>
-          ) : null}
-
-          {selectedColors.length > 0 ? (
-            <div className={css.input}>
-              <FormattedMessage
-                id="EditListingPricingAndVariantsForm.colorPhotosLabel"
-                tagName="h4"
-              />
-              <p className={css.hint}>
-                <FormattedMessage id="EditListingPricingAndVariantsForm.colorPhotosHint" />
-              </p>
-              {selectedColors.map(colorOption => (
-                <FieldColorImage
-                  key={colorOption}
-                  colorOption={colorOption}
-                  colorLabel={colorLabelFor(colorOption)}
-                  existingImageUrl={existingColorImages[colorOption]}
-                  formApi={formApi}
-                  values={values}
-                  intl={intl}
+          {hasColorOptions ? (
+            <>
+              <div className={css.input}>
+                <FieldCheckboxGroup
+                  id={`${formId}.colorOptions`}
+                  name="colorOptions"
+                  label={intl.formatMessage({ id: 'EditListingPricingAndVariantsForm.colorsLabel' })}
+                  options={colorOptions}
                 />
-              ))}
-            </div>
-          ) : null}
+              </div>
+
+              {selectedColors.map(color => {
+                const sizesForColor = sizesByColor[color] || [];
+                return (
+                  <div className={css.colorGroup} key={color}>
+                    <h4 className={css.colorGroupHeading}>{colorLabelFor(color)}</h4>
+
+                    {sizeOptions.length > 0 ? (
+                      <FieldCheckboxGroup
+                        id={`${formId}.sizesByColor.${color}`}
+                        name={`sizesByColor.${color}`}
+                        label={intl.formatMessage({
+                          id: 'EditListingPricingAndVariantsForm.sizesLabel',
+                        })}
+                        options={sizeOptions}
+                      />
+                    ) : null}
+
+                    <FieldColorImage
+                      colorOption={color}
+                      colorLabel={colorLabelFor(color)}
+                      existingImageUrl={existingColorImages[color]}
+                      formApi={formApi}
+                      values={values}
+                      intl={intl}
+                    />
+
+                    {sizesForColor.length > 0 ? (
+                      <div className={css.combinations}>
+                        {sizesForColor.map(size => {
+                          const comboKey = variantComboKey({ size, color });
+                          return (
+                            <FieldTextInput
+                              key={comboKey}
+                              className={css.comboInput}
+                              id={`${formId}.quantities.${comboKey}`}
+                              name={`quantities.${comboKey}`}
+                              label={sizeLabelFor(size)}
+                              type="number"
+                              min={0}
+                              validate={validators.numberAtLeast(
+                                intl.formatMessage({
+                                  id: 'EditListingPricingAndVariantsForm.stockIsRequired',
+                                }),
+                                0
+                              )}
+                              onWheel={e => {
+                                if (e.target === document.activeElement) {
+                                  e.target.blur();
+                                  setTimeout(() => {
+                                    e.target.focus();
+                                  }, 0);
+                                }
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </>
+          ) : (
+            <>
+              {sizeOptions.length > 0 ? (
+                <div className={css.input}>
+                  <FieldCheckboxGroup
+                    id={`${formId}.sizeOptions`}
+                    name="sizeOptions"
+                    label={intl.formatMessage({ id: 'EditListingPricingAndVariantsForm.sizesLabel' })}
+                    options={sizeOptions}
+                  />
+                </div>
+              ) : null}
+
+              {hasCombinations ? (
+                <div className={css.combinations}>
+                  <FormattedMessage
+                    id="EditListingPricingAndVariantsForm.quantitiesLabel"
+                    tagName="h4"
+                  />
+                  {combinations.map(combo => {
+                    const comboKey = variantComboKey(combo);
+                    return (
+                      <FieldTextInput
+                        key={comboKey}
+                        className={css.comboInput}
+                        id={`${formId}.quantities.${comboKey}`}
+                        name={`quantities.${comboKey}`}
+                        label={sizeLabelFor(combo.size)}
+                        type="number"
+                        min={0}
+                        validate={validators.numberAtLeast(
+                          intl.formatMessage({
+                            id: 'EditListingPricingAndVariantsForm.stockIsRequired',
+                          }),
+                          0
+                        )}
+                        onWheel={e => {
+                          if (e.target === document.activeElement) {
+                            e.target.blur();
+                            setTimeout(() => {
+                              e.target.focus();
+                            }, 0);
+                          }
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              ) : null}
+            </>
+          )}
 
           {!hasCombinations ? (
             <p className={css.hint}>
               <FormattedMessage id="EditListingPricingAndVariantsForm.selectAtLeastOne" />
             </p>
-          ) : (
-            <div className={css.combinations}>
-              <FormattedMessage id="EditListingPricingAndVariantsForm.quantitiesLabel" tagName="h4" />
-              {combinations.map(combo => {
-                const comboKey = variantComboKey(combo);
-                const comboLabel = [
-                  combo.size ? sizeLabelFor(combo.size) : null,
-                  combo.color ? colorLabelFor(combo.color) : null,
-                ]
-                  .filter(Boolean)
-                  .join(' / ');
-                return (
-                  <FieldTextInput
-                    key={comboKey}
-                    className={css.comboInput}
-                    id={`${formId}.quantities.${comboKey}`}
-                    name={`quantities.${comboKey}`}
-                    label={comboLabel}
-                    type="number"
-                    min={0}
-                    validate={validators.numberAtLeast(
-                      intl.formatMessage({ id: 'EditListingPricingAndVariantsForm.stockIsRequired' }),
-                      0
-                    )}
-                    onWheel={e => {
-                      if (e.target === document.activeElement) {
-                        e.target.blur();
-                        setTimeout(() => {
-                          e.target.focus();
-                        }, 0);
-                      }
-                    }}
-                  />
-                );
-              })}
-            </div>
-          )}
+          ) : null}
           {setStockError ? <p className={css.error}>{stockErrorMessage}</p> : null}
 
           <Button

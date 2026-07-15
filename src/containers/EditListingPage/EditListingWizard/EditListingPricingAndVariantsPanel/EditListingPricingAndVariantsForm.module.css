@@ -44,6 +44,24 @@
   margin-bottom: 12px;
 }
 
+.colorGroup {
+  flex-shrink: 0;
+  width: 100%;
+  margin-bottom: 24px;
+  padding: 16px;
+  border: 1px solid var(--colorGrey100);
+  border-radius: var(--borderRadiusMedium);
+
+  @media (--viewportMedium) {
+    margin-bottom: 32px;
+  }
+}
+
+.colorGroupHeading {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
 .colorImageRow {
   display: flex;
   align-items: center;

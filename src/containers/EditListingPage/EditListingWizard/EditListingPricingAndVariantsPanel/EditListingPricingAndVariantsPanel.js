@@ -51,18 +51,32 @@ const existingCombosOf = (listing, variantSiblings) => {
   return [primaryCombo, ...siblingCombos].filter(c => c.size || c.color);
 };
 
+// Groups existing combos by color, e.g. { Green: ['S', 'M'], White: ['M', 'L', 'XL'] } - each
+// color remembers only the sizes it actually has, rather than every color being assumed to have
+// every size ever used across the whole product (which is what the old flat sizeOptions/
+// colorOptions union did, and is exactly the bug that made re-editing a listing produce
+// unwanted extra combinations).
+const sizesByColorOf = existingCombos =>
+  existingCombos.reduce((acc, c) => {
+    if (!c.color) return acc;
+    const sizes = acc[c.color] || [];
+    acc[c.color] = c.size && !sizes.includes(c.size) ? [...sizes, c.size] : sizes;
+    return acc;
+  }, {});
+
 const getInitialValues = (listing, variantSiblings) => {
   const price = listing?.attributes?.price;
   const existingCombos = existingCombosOf(listing, variantSiblings);
 
   const sizeOptions = [...new Set(existingCombos.map(c => c.size).filter(Boolean))];
   const colorOptions = [...new Set(existingCombos.map(c => c.color).filter(Boolean))];
+  const sizesByColor = sizesByColorOf(existingCombos);
   const quantities = existingCombos.reduce((acc, c) => {
     acc[variantComboKey(c)] = c.currentStock != null ? c.currentStock : 0;
     return acc;
   }, {});
 
-  return { price, sizeOptions, colorOptions, quantities };
+  return { price, sizeOptions, colorOptions, sizesByColor, quantities };
 };
 
 /**
@@ -226,6 +240,7 @@ const EditListingPricingAndVariantsPanel = props => {
               price,
               sizeOptions = [],
               colorOptions = [],
+              sizesByColor = {},
               quantities = {},
               colorImages = {},
             } = values;
@@ -235,19 +250,35 @@ const EditListingPricingAndVariantsPanel = props => {
             // Guarantee it always survives into the submitted combinations regardless of
             // checkbox state.
             const currentPrimary = existingCombos.find(c => c.isPrimary);
-            const effectiveSizes =
-              currentPrimary?.size && !sizeOptions.includes(currentPrimary.size)
-                ? [...sizeOptions, currentPrimary.size]
-                : sizeOptions;
+            const hasColorOptions = !!colorFieldConfig;
+
+            // Grouped case: each color keeps only its own picked sizes (sizesByColor), instead of
+            // every selected color getting the full cross-product of every selected size.
+            // Fallback case (no color field configured for this listing type at all): unchanged
+            // flat size-only behavior.
             const effectiveColors =
               currentPrimary?.color && !colorOptions.includes(currentPrimary.color)
                 ? [...colorOptions, currentPrimary.color]
                 : colorOptions;
+            const effectiveSizesByColor = { ...sizesByColor };
+            if (currentPrimary?.color) {
+              const sizesForPrimaryColor = effectiveSizesByColor[currentPrimary.color] || [];
+              effectiveSizesByColor[currentPrimary.color] =
+                currentPrimary.size && !sizesForPrimaryColor.includes(currentPrimary.size)
+                  ? [...sizesForPrimaryColor, currentPrimary.size]
+                  : sizesForPrimaryColor;
+            }
+            const effectiveSizes =
+              currentPrimary?.size && !sizeOptions.includes(currentPrimary.size)
+                ? [...sizeOptions, currentPrimary.size]
+                : sizeOptions;
 
-            const combinations = buildVariantCombinations({
-              size: effectiveSizes,
-              color: effectiveColors,
-            });
+            const combinations = hasColorOptions
+              ? effectiveColors.flatMap(color =>
+                  (effectiveSizesByColor[color] || []).map(size => ({ size, color }))
+                )
+              : buildVariantCombinations({ size: effectiveSizes });
+
             const existingByKey = existingCombos.reduce((acc, c) => {
               acc[variantComboKey(c)] = c;
               return acc;
@@ -289,7 +320,13 @@ const EditListingPricingAndVariantsPanel = props => {
               .map(c => c.listingId);
 
             setState({
-              initialValues: { price, sizeOptions: effectiveSizes, colorOptions: effectiveColors, quantities },
+              initialValues: {
+                price,
+                sizeOptions: effectiveSizes,
+                colorOptions: effectiveColors,
+                sizesByColor: effectiveSizesByColor,
+                quantities,
+              },
               existingCombos: variantCombinations.map(c => ({
                 size: c.size,
                 color: c.color,
