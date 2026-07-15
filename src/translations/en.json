@@ -330,6 +330,7 @@
   "EditListingPricingAndVariantsForm.priceRequired": "You need to add a valid price.",
   "EditListingPricingAndVariantsForm.priceTooLow": "Price should be at least {minPrice}.",
   "EditListingPricingAndVariantsForm.quantitiesLabel": "Quantity per combination",
+  "EditListingPricingAndVariantsForm.quantityPlaceholder": "Qty",
   "EditListingPricingAndVariantsForm.replacePhoto": "Replace photo",
   "EditListingPricingAndVariantsForm.selectAtLeastOne": "Select at least one size or color to set quantities.",
   "EditListingPricingAndVariantsForm.showListingFailed": "Fetching listing data failed.",

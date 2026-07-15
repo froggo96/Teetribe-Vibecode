@@ -18,6 +18,7 @@ import {
   Form,
   FieldCurrencyInput,
   FieldCheckboxGroup,
+  FieldCheckbox,
   FieldTextInput,
 } from '../../../../components';
 
@@ -217,57 +218,65 @@ export const EditListingPricingAndVariantsForm = props => (
                     <h4 className={css.colorGroupHeading}>{colorLabelFor(color)}</h4>
 
                     {sizeOptions.length > 0 ? (
-                      <FieldCheckboxGroup
-                        id={`${formId}.sizesByColor.${color}`}
-                        name={`sizesByColor.${color}`}
-                        label={intl.formatMessage({
-                          id: 'EditListingPricingAndVariantsForm.sizesLabel',
-                        })}
-                        options={sizeOptions}
-                      />
-                    ) : null}
-
-                    <FieldColorImage
-                      colorOption={color}
-                      colorLabel={colorLabelFor(color)}
-                      existingImageUrl={existingColorImages[color]}
-                      formApi={formApi}
-                      values={values}
-                      intl={intl}
-                    />
-
-                    {sizesForColor.length > 0 ? (
-                      <div className={css.combinations}>
-                        {sizesForColor.map(size => {
-                          const comboKey = variantComboKey({ size, color });
+                      <div className={css.sizeRows}>
+                        <span className={css.sizeRowsLabel}>
+                          {intl.formatMessage({
+                            id: 'EditListingPricingAndVariantsForm.sizesLabel',
+                          })}
+                        </span>
+                        {sizeOptions.map(size => {
+                          const isChecked = sizesForColor.includes(size.key);
+                          const comboKey = variantComboKey({ size: size.key, color });
                           return (
-                            <FieldTextInput
-                              key={comboKey}
-                              className={css.comboInput}
-                              id={`${formId}.quantities.${comboKey}`}
-                              name={`quantities.${comboKey}`}
-                              label={sizeLabelFor(size)}
-                              type="number"
-                              min={0}
-                              validate={validators.numberAtLeast(
-                                intl.formatMessage({
-                                  id: 'EditListingPricingAndVariantsForm.stockIsRequired',
-                                }),
-                                0
-                              )}
-                              onWheel={e => {
-                                if (e.target === document.activeElement) {
-                                  e.target.blur();
-                                  setTimeout(() => {
-                                    e.target.focus();
-                                  }, 0);
-                                }
-                              }}
-                            />
+                            <div className={css.sizeRow} key={size.key}>
+                              <FieldCheckbox
+                                id={`${formId}.sizesByColor.${color}.${size.key}`}
+                                name={`sizesByColor.${color}`}
+                                value={size.key}
+                                label={size.label}
+                              />
+                              {isChecked ? (
+                                <FieldTextInput
+                                  className={css.sizeRowQuantity}
+                                  id={`${formId}.quantities.${comboKey}`}
+                                  name={`quantities.${comboKey}`}
+                                  placeholder={intl.formatMessage({
+                                    id: 'EditListingPricingAndVariantsForm.quantityPlaceholder',
+                                  })}
+                                  type="number"
+                                  min={0}
+                                  validate={validators.numberAtLeast(
+                                    intl.formatMessage({
+                                      id: 'EditListingPricingAndVariantsForm.stockIsRequired',
+                                    }),
+                                    0
+                                  )}
+                                  onWheel={e => {
+                                    if (e.target === document.activeElement) {
+                                      e.target.blur();
+                                      setTimeout(() => {
+                                        e.target.focus();
+                                      }, 0);
+                                    }
+                                  }}
+                                />
+                              ) : null}
+                            </div>
                           );
                         })}
                       </div>
                     ) : null}
+
+                    <div className={css.colorPhotoSection}>
+                      <FieldColorImage
+                        colorOption={color}
+                        colorLabel={colorLabelFor(color)}
+                        existingImageUrl={existingColorImages[color]}
+                        formApi={formApi}
+                        values={values}
+                        intl={intl}
+                      />
+                    </div>
                   </div>
                 );
               })}
