@@ -52,20 +52,24 @@ export const OrderBreakdownComponent = props => {
   const allLineItems = transaction.attributes.lineItems || [];
   // We'll show only line-items that are specific for the current userRole (customer vs provider)
   const lineItems = allLineItems.filter(lineItem => lineItem.includeFor.includes(userRole));
-  const unitLineItem = lineItems.find(
+  const unitLineItems = lineItems.filter(
     item => LISTING_UNIT_TYPES.includes(item.code) && !item.reversal
   );
+  const unitLineItem = unitLineItems[0];
   // Line-item code that matches with base unit: day, night, hour, fixed, item
   const lineItemUnitType = unitLineItem?.code;
   const dateType = [LINE_ITEM_HOUR, LINE_ITEM_FIXED].includes(lineItemUnitType)
     ? DATE_TYPE_DATETIME
     : DATE_TYPE_DATE;
 
-  // A cart order is a single-seller checkout covering multiple listings (see
-  // src/util/cartHelpers.js) - protectedData.cartItems is only ever set with more than one
-  // entry in that case (a "buy now" purchase is a cart of one, and isn't labeled this way).
+  // A cart order (a single-seller checkout covering multiple listings, see
+  // src/util/cartHelpers.js) produces one unit line item per listing, so it's recognized
+  // by having more than one - this also covers estimated transactions (e.g. the cart
+  // page's preview) that carry no protectedData. When protectedData.cartItems is present
+  // (real and speculated transactions), the rows get labeled with the listing titles;
+  // otherwise they fall back to plain "unitPrice x quantity" rows.
+  const hasMultipleUnitLineItems = unitLineItems.length > 1;
   const cartItems = transaction.attributes.protectedData?.cartItems;
-  const isCartOrder = Array.isArray(cartItems) && cartItems.length > 1;
 
   const hasCommissionLineItem = lineItems.find(item => {
     const hasCustomerCommission = isCustomer && item.code === LINE_ITEM_CUSTOMER_COMMISSION;
@@ -120,7 +124,7 @@ export const OrderBreakdownComponent = props => {
         timeZone={timeZone}
       />
 
-      {isCartOrder ? (
+      {hasMultipleUnitLineItems ? (
         <LineItemCartItemsMaybe
           lineItems={lineItems}
           code={lineItemUnitType}
