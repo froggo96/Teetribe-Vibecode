@@ -8,12 +8,32 @@ import css from './VariantPicker.module.css';
 
 const distinctValues = (combos, key) => [...new Set(combos.map(c => c[key]).filter(Boolean))];
 
+const enumOptionsFor = (listingFieldsConfig, attributeKey) => {
+  const configKey = VARIANT_ATTRIBUTE_CONFIG_KEY[attributeKey];
+  return (listingFieldsConfig || []).find(f => f.key === configKey)?.enumOptions;
+};
+
+// Order option values as they are configured in the marketplace's listing field (e.g.
+// S, M, L, XL) - the combos array follows sibling-listing storage order, which is
+// arbitrary (primary first, then whatever order the siblings were created in). Unknown
+// values sort last, keeping their relative order.
+const sortByConfigOrder = (values, listingFieldsConfig, attributeKey) => {
+  const enumOptions = enumOptionsFor(listingFieldsConfig, attributeKey);
+  if (!enumOptions) {
+    return values;
+  }
+  const indexOf = value => {
+    const index = enumOptions.findIndex(o => o.option === value);
+    return index === -1 ? enumOptions.length : index;
+  };
+  return [...values].sort((a, b) => indexOf(a) - indexOf(b));
+};
+
 // Human-readable label for a raw option value (e.g. 'medium' -> 'M'), from the marketplace's
 // listing fields config. Falls back to the raw value if the option is unknown.
 const labelFor = (listingFieldsConfig, attributeKey, value) => {
-  const configKey = VARIANT_ATTRIBUTE_CONFIG_KEY[attributeKey];
-  const field = (listingFieldsConfig || []).find(f => f.key === configKey);
-  return field?.enumOptions?.find(o => o.option === value)?.label || value;
+  const enumOptions = enumOptionsFor(listingFieldsConfig, attributeKey);
+  return enumOptions?.find(o => o.option === value)?.label || value;
 };
 
 /**
@@ -46,7 +66,10 @@ const VariantPicker = props => {
   const attributeGroups = [
     { key: 'size', labelId: 'VariantPicker.sizeLabel' },
     { key: 'color', labelId: 'VariantPicker.colorLabel' },
-  ].map(group => ({ ...group, values: distinctValues(combos, group.key) }));
+  ].map(group => ({
+    ...group,
+    values: sortByConfigOrder(distinctValues(combos, group.key), listingFieldsConfig, group.key),
+  }));
 
   return (
     <div className={classes}>
