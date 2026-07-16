@@ -1,5 +1,8 @@
+@import '../../styles/customMediaQueries.css';
+
 .root {
   display: flex;
+  align-items: center;
   gap: 16px;
   padding: 16px 0;
   border-bottom: 1px solid var(--colorGrey100);
@@ -7,16 +10,25 @@
   &:last-child {
     border-bottom: none;
   }
+
+  @media (--viewportMedium) {
+    gap: 24px;
+  }
 }
 
 .thumbnailLink {
   display: block;
   flex-shrink: 0;
   width: 96px;
+
+  @media (--viewportMedium) {
+    width: 140px;
+  }
 }
 
 .aspectRatioWrapper {
   width: 100%;
+  border: 1px solid var(--colorGrey100);
   border-radius: var(--borderRadiusMedium);
   overflow: hidden;
   background-color: var(--colorGrey100);
@@ -41,6 +53,11 @@
   height: 96px;
   border-radius: var(--borderRadiusMedium);
   background-color: var(--colorGrey100);
+
+  @media (--viewportMedium) {
+    width: 140px;
+    height: 140px;
+  }
 }
 
 .details {

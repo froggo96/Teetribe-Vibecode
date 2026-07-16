@@ -6,7 +6,7 @@ import { propTypes } from '../../../util/types';
 import { userDisplayNameAsString } from '../../../util/data';
 import { createSlug } from '../../../util/urlHelpers';
 import { displayPrice } from '../../../util/configHelpers';
-import { variantDisplayLabels } from '../../../util/variantHelpers';
+import { variantDisplayLabels, variantGroupIdOf } from '../../../util/variantHelpers';
 
 import { AvatarLarge, NamedLink, UserDisplayName } from '../../../components';
 
@@ -164,6 +164,11 @@ export class TransactionPanelComponent extends Component {
     const listingTitle = listingDeleted ? deletedListingTitle : listing?.attributes?.title;
     const firstImage = listing?.images?.length > 0 ? listing?.images[0] : null;
 
+    // For products with variants the transacted listing is a hidden sibling (one
+    // size/color combination) that isn't meant to be browsed directly - every link on
+    // this page points to the primary (search-visible) listing instead.
+    const linkableListingId = variantGroupIdOf(listing) || listing?.id?.uuid;
+
     const listingType = listing?.attributes?.publicData?.listingType;
     const listingTypeConfigs = config.listing.listingTypes;
     const listingTypeConfig = listingTypeConfigs.find(conf => conf.listingType === listingType);
@@ -224,7 +229,7 @@ export class TransactionPanelComponent extends Component {
               transactionRole={transactionRole}
               providerName={authorDisplayName}
               customerName={customerDisplayName}
-              listingId={listing?.id?.uuid}
+              listingId={linkableListingId}
               listingTitle={listingTitle}
               listingDeleted={listingDeleted}
             />
@@ -319,12 +324,19 @@ export class TransactionPanelComponent extends Component {
                   showDetailCardHeadings={showDetailCardHeadings}
                   showListingImage={showListingImage}
                   listingTitle={
-                    listingDeleted ? (
+                    isMultiItemCartOrder ? (
+                      // A multi-item order isn't about any single listing - the items
+                      // list right below names (and links) every purchased item.
+                      <FormattedMessage
+                        id="TransactionPanel.cartItemsHeading"
+                        values={{ count: cartItems.length }}
+                      />
+                    ) : listingDeleted ? (
                       listingTitle
                     ) : (
                       <NamedLink
                         name="ListingPage"
-                        params={{ id: listing.id?.uuid, slug: createSlug(listingTitle) }}
+                        params={{ id: linkableListingId, slug: createSlug(listingTitle) }}
                       >
                         {listingTitle}
                       </NamedLink>
@@ -334,7 +346,7 @@ export class TransactionPanelComponent extends Component {
                   price={listing?.attributes?.price}
                   intl={intl}
                 />
-                <CartItemsListMaybe cartItems={cartItems} />
+                <CartItemsListMaybe cartItems={cartItems} showHeading={false} />
                 {showOrderPanel ? orderPanel : null}
                 {showBreakDown ? (
                   <BreakdownMaybe
