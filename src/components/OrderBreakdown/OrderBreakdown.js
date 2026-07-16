@@ -20,6 +20,7 @@ import {
 
 import LineItemBookingPeriod from './LineItemBookingPeriod';
 import LineItemBasePriceMaybe from './LineItemBasePriceMaybe';
+import LineItemCartItemsMaybe from './LineItemCartItemsMaybe';
 import LineItemSubTotalMaybe from './LineItemSubTotalMaybe';
 import LineItemShippingFeeMaybe from './LineItemShippingFeeMaybe';
 import LineItemPickupFeeMaybe from './LineItemPickupFeeMaybe';
@@ -59,6 +60,12 @@ export const OrderBreakdownComponent = props => {
   const dateType = [LINE_ITEM_HOUR, LINE_ITEM_FIXED].includes(lineItemUnitType)
     ? DATE_TYPE_DATETIME
     : DATE_TYPE_DATE;
+
+  // A cart order is a single-seller checkout covering multiple listings (see
+  // src/util/cartHelpers.js) - protectedData.cartItems is only ever set with more than one
+  // entry in that case (a "buy now" purchase is a cart of one, and isn't labeled this way).
+  const cartItems = transaction.attributes.protectedData?.cartItems;
+  const isCartOrder = Array.isArray(cartItems) && cartItems.length > 1;
 
   const hasCommissionLineItem = lineItems.find(item => {
     const hasCustomerCommission = isCustomer && item.code === LINE_ITEM_CUSTOMER_COMMISSION;
@@ -113,7 +120,16 @@ export const OrderBreakdownComponent = props => {
         timeZone={timeZone}
       />
 
-      <LineItemBasePriceMaybe lineItems={lineItems} code={lineItemUnitType} intl={intl} />
+      {isCartOrder ? (
+        <LineItemCartItemsMaybe
+          lineItems={lineItems}
+          code={lineItemUnitType}
+          cartItems={cartItems}
+          intl={intl}
+        />
+      ) : (
+        <LineItemBasePriceMaybe lineItems={lineItems} code={lineItemUnitType} intl={intl} />
+      )}
       <LineItemShippingFeeMaybe lineItems={lineItems} intl={intl} />
       <LineItemPickupFeeMaybe lineItems={lineItems} intl={intl} />
       <LineItemUnknownItemsMaybe lineItems={lineItems} isProvider={isProvider} intl={intl} />

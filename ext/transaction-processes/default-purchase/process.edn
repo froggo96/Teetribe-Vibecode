@@ -9,7 +9,6 @@
    :privileged? true,
    :actions
    [{:name :action/update-protected-data}
-    {:name :action/create-pending-stock-reservation}
     {:name :action/privileged-set-line-items}
     {:name :action/stripe-create-payment-intent}],
    :to :state/pending-payment}
@@ -18,18 +17,21 @@
    :privileged? true,
    :actions
    [{:name :action/update-protected-data}
-    {:name :action/create-pending-stock-reservation}
     {:name :action/privileged-set-line-items}
     {:name :action/stripe-create-payment-intent}],
    :from :state/inquiry,
    :to :state/pending-payment}
+  {:name :transition/update-child-transactions,
+   :actor :actor.role/customer,
+   :actions [{:name :action/update-protected-data}],
+   :from :state/pending-payment,
+   :to :state/pending-update-child-transactions}
   {:name :transition/confirm-payment,
    :actor :actor.role/customer,
    :actions
-   [{:name :action/accept-stock-reservation}
-    {:name :action/stripe-confirm-payment-intent}
+   [{:name :action/stripe-confirm-payment-intent}
     {:name :action/stripe-capture-payment-intent}],
-   :from :state/pending-payment,
+   :from :state/pending-update-child-transactions,
    :to :state/purchased}
   {:name :transition/expire-payment,
    :at
@@ -38,11 +40,18 @@
      {:fn/period ["PT15M"]}]},
    :actions
    [{:name :action/calculate-full-refund}
-    {:name :action/stripe-refund-payment}
-    ;; Keep this action last in the list of actions for
-    ;; the transition
-    {:name :action/decline-stock-reservation}],
+    {:name :action/stripe-refund-payment}],
    :from :state/pending-payment,
+   :to :state/payment-expired}
+  {:name :transition/expire-payment-from-pending-update,
+   :at
+   {:fn/plus
+    [{:fn/timepoint [:time/first-entered-state :state/pending-update-child-transactions]}
+     {:fn/period ["PT15M"]}]},
+   :actions
+   [{:name :action/calculate-full-refund}
+    {:name :action/stripe-refund-payment}],
+   :from :state/pending-update-child-transactions,
    :to :state/payment-expired}
   {:name :transition/mark-received-from-purchased,
    :actor :actor.role/customer,
@@ -91,10 +100,7 @@
    :actor :actor.role/operator,
    :actions
    [{:name :action/calculate-full-refund}
-    {:name :action/stripe-refund-payment}
-    ;; Keep this action last in the list of actions for
-    ;; the transition
-    {:name :action/cancel-stock-reservation}],
+    {:name :action/stripe-refund-payment}],
    :from :state/purchased,
    :to :state/canceled}
   {:name :transition/auto-cancel,
@@ -104,20 +110,14 @@
      {:fn/period ["P14D"]}]},
    :actions
    [{:name :action/calculate-full-refund}
-    {:name :action/stripe-refund-payment}
-    ;; Keep this action last in the list of actions for
-    ;; the transition
-    {:name :action/cancel-stock-reservation}],
+    {:name :action/stripe-refund-payment}],
    :from :state/purchased,
    :to :state/canceled}
   {:name :transition/cancel-from-disputed,
    :actor :actor.role/operator,
    :actions
    [{:name :action/calculate-full-refund}
-    {:name :action/stripe-refund-payment}
-    ;; Keep this action last in the list of actions for
-    ;; the transition
-    {:name :action/cancel-stock-reservation}],
+    {:name :action/stripe-refund-payment}],
    :from :state/disputed,
    :to :state/canceled}
   {:name :transition/auto-cancel-from-disputed,
@@ -127,10 +127,7 @@
      {:fn/period ["P60D"]}]},
    :actions
    [{:name :action/calculate-full-refund}
-    {:name :action/stripe-refund-payment}
-    ;; Keep this action last in the list of actions for
-    ;; the transition
-    {:name :action/cancel-stock-reservation}],
+    {:name :action/stripe-refund-payment}],
    :from :state/disputed,
    :to :state/canceled}
   {:name :transition/auto-complete,

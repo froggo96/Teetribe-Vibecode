@@ -16,6 +16,7 @@ export { default as IconAdd } from './IconAdd/IconAdd';
 export { default as IconAlert } from './IconAlert/IconAlert';
 export { default as IconArrowHead } from './IconArrowHead/IconArrowHead';
 export { default as IconBannedUser } from './IconBannedUser/IconBannedUser';
+export { default as IconCart } from './IconCart/IconCart';
 export { default as IconCheckmark } from './IconCheckmark/IconCheckmark';
 export { default as IconClose } from './IconClose/IconClose';
 export { default as IconDate } from './IconDate/IconDate';
@@ -133,6 +134,7 @@ export { default as FileUpload } from './FileUpload/FileUpload'
 export { default as OrderBreakdown } from './OrderBreakdown/OrderBreakdown';
 export { default as OrderPanel } from './OrderPanel/OrderPanel';
 export { default as FavoriteButton } from './FavoriteButton/FavoriteButton';
+export { default as AddToCartButton } from './AddToCartButton/AddToCartButton';
 export { default as ListingCard } from './ListingCard/ListingCard';
 export { default as Map } from './Map/Map';
 export { default as Page } from './Page/Page';

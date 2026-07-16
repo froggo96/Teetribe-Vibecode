@@ -64,6 +64,14 @@ is "offer", the transaction process follows the regular flow: the provider has c
 However, if the unit type is "request", the listing is created by the customer, and the transaction
 is initiated when the provider responds to the request by making an offer.
 
+## [transactionProcessCartStock.js](transactionProcessCartStock.js)
+
+This file defines the process graph for _cart-stock-process_, a child process used by the shopping
+cart feature. One instance is created per cart listing during checkout, purely to reserve/confirm/
+release that listing's stock independently of the parent _default-purchase_ transaction's own
+payment lifecycle. It has no notifications and is excluded from `getSupportedProcessesInfo()` in
+`transaction.js`, so these transactions never show up in the inbox or other user-facing lists.
+
 ## [../../ext/transaction-processes](../../ext/transaction-processes/README.md)
 
 These files reference the actual transaction processes that are available by default on each

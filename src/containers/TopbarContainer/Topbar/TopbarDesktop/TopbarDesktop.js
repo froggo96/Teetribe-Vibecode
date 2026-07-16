@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import classNames from 'classnames';
+import { useSelector } from 'react-redux';
 
-import { FormattedMessage } from '../../../../util/reactIntl';
+import { FormattedMessage, useIntl } from '../../../../util/reactIntl';
 import { ACCOUNT_SETTINGS_PAGES } from '../../../../routing/routeConfiguration';
+import { selectCartTotalCount } from '../../../../ducks/cart.duck';
 import {
   Avatar,
+  IconCart,
   InlineTextButton,
   LinkedLogo,
   Menu,
@@ -12,6 +15,7 @@ import {
   MenuContent,
   MenuItem,
   NamedLink,
+  NotificationBadge,
 } from '../../../../components';
 
 import TopbarSearchForm from '../TopbarSearchForm/TopbarSearchForm';
@@ -56,6 +60,24 @@ const InboxLink = ({ notificationCount, inboxTab }) => {
   );
 };
 
+const CartLink = () => {
+  const intl = useIntl();
+  const cartCount = useSelector(selectCartTotalCount);
+  return (
+    <NamedLink
+      id="cart-link"
+      className={css.topbarLink}
+      name="CartPage"
+      aria-label={intl.formatMessage({ id: 'TopbarDesktop.cartLink' })}
+    >
+      <span className={css.topbarLinkLabel}>
+        <IconCart className={css.cartIcon} />
+        {cartCount > 0 ? <NotificationBadge className={css.cartBadge} count={cartCount} /> : null}
+      </span>
+    </NamedLink>
+  );
+};
+
 const ProfileMenu = ({ currentPage, currentUser, onLogout, showManageListingsLink, intl }) => {
   const currentPageClass = page => {
     const isAccountSettingsPage =
@@ -85,6 +107,15 @@ const ProfileMenu = ({ currentPage, currentUser, onLogout, showManageListingsLin
             </NamedLink>
           </MenuItem>
         ) : null}
+        <MenuItem key="CartPage">
+          <NamedLink
+            className={classNames(css.menuLink, currentPageClass('CartPage'))}
+            name="CartPage"
+          >
+            <span className={css.menuItemBorder} />
+            <FormattedMessage id="TopbarDesktop.cartLink" />
+          </NamedLink>
+        </MenuItem>
         <MenuItem key="FavoriteListingsPage">
           <NamedLink
             className={classNames(css.menuLink, currentPageClass('FavoriteListingsPage'))}
@@ -179,6 +210,8 @@ const TopbarDesktop = props => {
     <InboxLink notificationCount={notificationCount} inboxTab={inboxTab} />
   ) : null;
 
+  const cartLinkMaybe = authenticatedOnClientSide ? <CartLink /> : null;
+
   const profileMenuMaybe = authenticatedOnClientSide ? (
     <ProfileMenu
       currentPage={currentPage}
@@ -231,6 +264,7 @@ const TopbarDesktop = props => {
       />
 
       {inboxLinkMaybe}
+      {cartLinkMaybe}
       {profileMenuMaybe}
       {signupLinkMaybe}
       {loginLinkMaybe}

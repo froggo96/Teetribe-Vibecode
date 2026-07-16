@@ -3,6 +3,7 @@ import * as purchaseProcess from './transactionProcessPurchase';
 import * as bookingProcess from './transactionProcessBooking';
 import * as inquiryProcess from './transactionProcessInquiry';
 import * as negotiationProcess from './transactionProcessNegotiation';
+import * as cartStockProcess from './transactionProcessCartStock';
 
 // Supported unit types
 // Note: These are passed to translations/microcopy in certain cases.
@@ -21,6 +22,12 @@ export const PURCHASE_PROCESS_NAME = 'default-purchase';
 export const BOOKING_PROCESS_NAME = 'default-booking';
 export const INQUIRY_PROCESS_NAME = 'default-inquiry';
 export const NEGOTIATION_PROCESS_NAME = 'default-negotiation';
+// A child process: one instance is created per cart listing during checkout, to reserve
+// stock for that listing independently of the parent (default-purchase) transaction's own
+// payment lifecycle. Never initiated directly by a listing, so it has no unitTypes of its
+// own, and it's excluded from getSupportedProcessesInfo() below (isChildProcess: true) so
+// it stays out of the inbox and other "known processes" listings.
+export const CART_STOCK_PROCESS_NAME = 'cart-stock-process';
 
 /**
  * A process should export:
@@ -59,6 +66,13 @@ const PROCESSES = [
     alias: `${NEGOTIATION_PROCESS_NAME}/release-1`,
     process: negotiationProcess,
     unitTypes: [OFFER, REQUEST],
+  },
+  {
+    name: CART_STOCK_PROCESS_NAME,
+    alias: `${CART_STOCK_PROCESS_NAME}/release-1`,
+    process: cartStockProcess,
+    unitTypes: [],
+    isChildProcess: true,
   },
 ];
 
@@ -258,15 +272,20 @@ export const getProcess = processName => {
 
 /**
  * Get the info about supported processes: name, alias, unitTypes
+ *
+ * Excludes child processes (e.g. cart-stock-process) - these are never initiated
+ * directly by a listing or shown to users, so they shouldn't appear in listing-type
+ * validation, the inbox query, or anywhere else this list is used to mean "processes a
+ * listing/transaction the user interacts with can be in".
  */
 export const getSupportedProcessesInfo = () =>
-  PROCESSES.map(p => {
+  PROCESSES.filter(p => !p.isChildProcess).map(p => {
     const { process, ...rest } = p;
     return rest;
   });
 
 /**
- * Get all the transitions for every supported process
+ * Get all the transitions for every supported process (including child processes).
  */
 export const getAllTransitionsForEveryProcess = () => {
   return PROCESSES.reduce((accTransitions, processInfo) => {

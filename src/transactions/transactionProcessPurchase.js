@@ -24,6 +24,11 @@ export const transitions = {
   INQUIRE: 'transition/inquire',
   REQUEST_PAYMENT_AFTER_INQUIRY: 'transition/request-payment-after-inquiry',
 
+  // For cart orders, once the payment has been requested, the customer's client creates one
+  // child stock-reservation transaction per cart listing, then reports their ids back onto
+  // this transaction's protectedData with this transition, before confirming payment.
+  UPDATE_CHILD_TRANSACTIONS: 'transition/update-child-transactions',
+
   // Stripe SDK might need to ask 3D security from customer, in a separate front-end step.
   // Therefore we need to make another transition to Marketplace API,
   // to tell that the payment is confirmed.
@@ -32,6 +37,10 @@ export const transitions = {
   // If the payment is not confirmed in the time limit set in transaction process (by default 15min)
   // the transaction will expire automatically.
   EXPIRE_PAYMENT: 'transition/expire-payment',
+
+  // Same as EXPIRE_PAYMENT, but for a transaction that already reached
+  // PENDING_UPDATE_CHILD_TRANSACTIONS before payment was confirmed.
+  EXPIRE_PAYMENT_FROM_PENDING_UPDATE: 'transition/expire-payment-from-pending-update',
 
   // Provider or opeartor can mark the product shipped/delivered
   MARK_DELIVERED: 'transition/mark-delivered',
@@ -96,6 +105,7 @@ export const states = {
   INITIAL: 'initial',
   INQUIRY: 'inquiry',
   PENDING_PAYMENT: 'pending-payment',
+  PENDING_UPDATE_CHILD_TRANSACTIONS: 'pending-update-child-transactions',
   PAYMENT_EXPIRED: 'payment-expired',
   PURCHASED: 'purchased',
   DELIVERED: 'delivered',
@@ -143,6 +153,13 @@ export const graph = {
     [states.PENDING_PAYMENT]: {
       on: {
         [transitions.EXPIRE_PAYMENT]: states.PAYMENT_EXPIRED,
+        [transitions.UPDATE_CHILD_TRANSACTIONS]: states.PENDING_UPDATE_CHILD_TRANSACTIONS,
+      },
+    },
+
+    [states.PENDING_UPDATE_CHILD_TRANSACTIONS]: {
+      on: {
+        [transitions.EXPIRE_PAYMENT_FROM_PENDING_UPDATE]: states.PAYMENT_EXPIRED,
         [transitions.CONFIRM_PAYMENT]: states.PURCHASED,
       },
     },
@@ -268,6 +285,7 @@ export const isCompleted = transition => {
 export const isRefunded = transition => {
   const txRefundedTransitions = [
     transitions.EXPIRE_PAYMENT,
+    transitions.EXPIRE_PAYMENT_FROM_PENDING_UPDATE,
     transitions.CANCEL,
     transitions.AUTO_CANCEL,
     transitions.AUTO_CANCEL_FROM_DISPUTED,

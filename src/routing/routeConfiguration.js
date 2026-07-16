@@ -15,6 +15,7 @@ const pageDataLoadingAPI = getPageDataLoadingAPI();
 const AuthenticationPage = loadable(() => import(/* webpackChunkName: "AuthenticationPage" */ '../containers/AuthenticationPage/AuthenticationPage'));
 const CheckoutPage = loadable(() => import(/* webpackChunkName: "CheckoutPage" */ '../containers/CheckoutPage/CheckoutPage'));
 const CMSPage = loadable(() => import(/* webpackChunkName: "CMSPage" */ '../containers/CMSPage/CMSPage'));
+const CartPage = loadable(() => import(/* webpackChunkName: "CartPage" */ '../containers/CartPage/CartPage'));
 const ContactDetailsPage = loadable(() => import(/* webpackChunkName: "ContactDetailsPage" */ '../containers/ContactDetailsPage/ContactDetailsPage'));
 const EditListingPage = loadable(() => import(/* webpackChunkName: "EditListingPage" */ '../containers/EditListingPage/EditListingPage'));
 const EmailVerificationPage = loadable(() => import(/* webpackChunkName: "EmailVerificationPage" */ '../containers/EmailVerificationPage/EmailVerificationPage'));
@@ -332,6 +333,14 @@ const routeConfiguration = (layoutConfig, accessControlConfig) => {
       authPage: 'LoginPage',
       component: FavoriteListingsPage,
       loadData: pageDataLoadingAPI.FavoriteListingsPage.loadData,
+    },
+    {
+      path: '/cart',
+      name: 'CartPage',
+      auth: true,
+      authPage: 'LoginPage',
+      component: CartPage,
+      loadData: pageDataLoadingAPI.CartPage.loadData,
     },
     {
       path: '/account',

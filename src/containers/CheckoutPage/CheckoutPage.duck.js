@@ -4,8 +4,15 @@ import { pick } from '../../util/common';
 import { initiatePrivileged, transitionPrivileged } from '../../util/api';
 import { denormalisedResponseEntities } from '../../util/data';
 import { storableError } from '../../util/errors';
+import { types as sdkTypes } from '../../util/sdkLoader';
 import * as log from '../../util/log';
 import { setCurrentUserHasOrders, fetchCurrentUser } from '../../ducks/user.duck';
+import { CART_STOCK_PROCESS_NAME } from '../../transactions/transaction';
+import { transitions as cartStockTransitions } from '../../transactions/transactionProcessCartStock';
+
+const { UUID } = sdkTypes;
+
+const CART_STOCK_PROCESS_ALIAS = `${CART_STOCK_PROCESS_NAME}/release-1`;
 
 // ================ Async thunks ================ //
 
@@ -19,12 +26,18 @@ const initiateOrderPayloadCreator = (
   // If we already have a transaction ID, we should transition, not initiate.
   const isTransition = !!transactionId;
 
-  const { deliveryMethod, quantity, bookingDates, ...otherOrderParams } = orderParams;
-  const quantityMaybe = quantity ? { stockReservationQuantity: quantity } : {};
+  const { deliveryMethod, quantity, bookingDates, cartItems, ...otherOrderParams } = orderParams;
+  // Cart orders (including "buy now", which is a cart of one) reserve stock through their own
+  // child transactions (see createStockReservationTransactions below) - no transition on this
+  // (parent) transaction consumes stockReservationQuantity for them, so it must not be sent.
+  const quantityMaybe = quantity && !cartItems ? { stockReservationQuantity: quantity } : {};
   const bookingParamsMaybe = bookingDates || {};
 
   // Parameters only for client app's server
-  const orderData = deliveryMethod ? { deliveryMethod } : {};
+  const orderData = {
+    ...(deliveryMethod ? { deliveryMethod } : {}),
+    ...(cartItems ? { cartItems } : {}),
+  };
 
   // Parameters for Marketplace API
   const transitionParams = {
@@ -264,15 +277,17 @@ const speculateTransactionPayloadCreator = (
     priceVariantName,
     quantity,
     bookingDates,
+    cartItems,
     ...otherOrderParams
   } = orderParams;
-  const quantityMaybe = quantity ? { stockReservationQuantity: quantity } : {};
+  const quantityMaybe = quantity && !cartItems ? { stockReservationQuantity: quantity } : {};
   const bookingParamsMaybe = bookingDates || {};
 
   // Parameters only for client app's server
   const orderData = {
     ...(deliveryMethod ? { deliveryMethod } : {}),
     ...(priceVariantName ? { priceVariantName } : {}),
+    ...(cartItems ? { cartItems } : {}),
   };
 
   // Parameters for Marketplace API
@@ -397,6 +412,120 @@ export const stripeCustomer = () => dispatch => {
   return dispatch(stripeCustomerThunk({})).unwrap();
 };
 
+///////////////////////////////////////////
+// Create Stock Reservation Transactions //
+///////////////////////////////////////////
+// One child transaction per cart listing, on cart-stock-process. Created right after the
+// parent transaction's request-payment succeeds, so stock is reserved for every listing
+// before the customer is charged. Listings that already have a child (from a previous,
+// partially-successful attempt) are skipped. If ANY reservation fails, this rejects with
+// every listing successfully reserved so far still recorded - checkout aborts before the
+// card is charged, and the created children are left to expire on their own.
+const createStockReservationTransactionsPayloadCreator = (
+  { cartItems, existingChildTransactions = {} },
+  { extra: sdk, rejectWithValue }
+) => {
+  const alreadyCreated = new Set(Object.keys(existingChildTransactions));
+  const toCreate = cartItems.filter(({ listingId }) => !alreadyCreated.has(listingId));
+
+  if (toCreate.length === 0) {
+    return Promise.resolve(existingChildTransactions);
+  }
+
+  return Promise.allSettled(
+    toCreate.map(({ listingId, quantity }) =>
+      sdk.transactions
+        .initiate(
+          {
+            processAlias: CART_STOCK_PROCESS_ALIAS,
+            transition: cartStockTransitions.REQUEST_STOCK_RESERVATION,
+            params: { listingId: new UUID(listingId), stockReservationQuantity: quantity },
+          },
+          { expand: true }
+        )
+        .then(response => response.data.data.id.uuid)
+    )
+  ).then(results => {
+    const childTransactions = { ...existingChildTransactions };
+    const failedListingIds = [];
+
+    results.forEach((result, i) => {
+      const { listingId } = toCreate[i];
+      if (result.status === 'fulfilled') {
+        childTransactions[listingId] = result.value;
+      } else {
+        failedListingIds.push(listingId);
+        log.error(result.reason, 'create-stock-reservation-failed', { listingId });
+      }
+    });
+
+    return failedListingIds.length > 0
+      ? rejectWithValue({ failedListingIds, childTransactions })
+      : childTransactions;
+  });
+};
+
+export const createStockReservationTransactionsThunk = createAsyncThunk(
+  'CheckoutPage/createStockReservationTransactions',
+  createStockReservationTransactionsPayloadCreator
+);
+export const createStockReservationTransactions = (
+  cartItems,
+  existingChildTransactions
+) => dispatch => {
+  return dispatch(
+    createStockReservationTransactionsThunk({ cartItems, existingChildTransactions })
+  ).unwrap();
+};
+
+////////////////////////////////////////////
+// Confirm Stock Reservation Transactions //
+////////////////////////////////////////////
+// Runs after the parent transaction's payment is confirmed - the sale has already happened
+// at this point, so a failure here must never fail checkout. One retry after a short delay,
+// then the failure is just logged (log.error) for an operator to reconcile manually.
+const confirmOneChildTransaction = (sdk, listingId, transactionIdString, attempt = 1) =>
+  sdk.transactions
+    .transition(
+      {
+        id: new UUID(transactionIdString),
+        transition: cartStockTransitions.CONFIRM_STOCK_RESERVATION,
+        params: {},
+      },
+      { expand: true }
+    )
+    .catch(e => {
+      if (attempt >= 2) {
+        log.error(e, 'confirm-stock-reservation-failed', {
+          listingId,
+          childTransactionId: transactionIdString,
+        });
+        return null;
+      }
+      return new Promise(resolve => setTimeout(resolve, 2000)).then(() =>
+        confirmOneChildTransaction(sdk, listingId, transactionIdString, attempt + 1)
+      );
+    });
+
+const confirmStockReservationTransactionsPayloadCreator = (
+  { childTransactions },
+  { extra: sdk }
+) => {
+  return Promise.all(
+    Object.entries(childTransactions).map(([listingId, transactionIdString]) =>
+      confirmOneChildTransaction(sdk, listingId, transactionIdString)
+    )
+  ).then(() => childTransactions);
+};
+
+export const confirmStockReservationTransactionsThunk = createAsyncThunk(
+  'CheckoutPage/confirmStockReservationTransactions',
+  confirmStockReservationTransactionsPayloadCreator
+);
+export const confirmStockReservationTransactions = childTransactions => dispatch => {
+  return dispatch(confirmStockReservationTransactionsThunk({ childTransactions })).unwrap();
+};
+
 // ================ Slice ================ //
 
 const initialState = {
@@ -409,6 +538,7 @@ const initialState = {
   transaction: null,
   initiateOrderError: null,
   confirmPaymentError: null,
+  initiateCartChildrenError: null,
   stripeCustomerFetched: false,
   stripeCustomerFetchError: null,
   initiateInquiryInProgress: false,
@@ -446,6 +576,14 @@ const checkoutPageSlice = createSlice({
       .addCase(confirmPaymentThunk.rejected, (state, action) => {
         console.error(action.payload);
         state.confirmPaymentError = action.payload;
+      })
+      // Create Stock Reservation Transactions cases (cart checkout)
+      .addCase(createStockReservationTransactionsThunk.pending, state => {
+        state.initiateCartChildrenError = null;
+      })
+      .addCase(createStockReservationTransactionsThunk.rejected, (state, action) => {
+        console.error(action.payload);
+        state.initiateCartChildrenError = action.payload;
       })
       // Speculate Transaction cases
       .addCase(speculateTransactionThunk.pending, state => {

@@ -176,8 +176,27 @@ export const InboxItem = props => {
   const lineItems = tx.attributes?.lineItems;
   const hasPricingData = lineItems.length > 0;
   const unitLineItem = getUnitLineItem(lineItems);
-  const quantity = hasPricingData && isPurchase ? unitLineItem.quantity.toString() : null;
-  const showStock = stockType === STOCK_MULTIPLE_ITEMS || (quantity && unitLineItem.quantity > 1);
+  // A cart order (a single-seller checkout covering multiple listings - see
+  // src/util/cartHelpers.js) has one line-item/item per listing - show total units across
+  // all of them rather than just the first. A "buy now" purchase is a cart of one, so
+  // cartItems is only ever set with more than one entry for a real multi-item order.
+  const cartItems = tx.attributes?.protectedData?.cartItems;
+  const isCartOrder = Array.isArray(cartItems) && cartItems.length > 1;
+  const cartUnitLineItems = isCartOrder
+    ? lineItems.filter(item => item.code === unitLineItem?.code && !item.reversal)
+    : null;
+  const quantity = !hasPricingData || !isPurchase
+    ? null
+    : isCartOrder
+    ? cartUnitLineItems.reduce((sum, item) => sum + item.quantity.toNumber(), 0).toString()
+    : unitLineItem.quantity.toString();
+  const showStock = stockType === STOCK_MULTIPLE_ITEMS || (quantity && Number(quantity) > 1);
+  const listingTitle = isCartOrder
+    ? intl.formatMessage(
+        { id: 'InboxPage.cartItemsTitle' },
+        { firstTitle: cartItems[0]?.title, moreCount: cartItems.length - 1 }
+      )
+    : listing?.attributes?.title;
   const otherUser = isCustomer ? provider : customer;
   const otherUserDisplayName = <UserDisplayName user={otherUser} intl={intl} />;
   const isOtherUserBanned = otherUser.attributes.banned;
@@ -206,7 +225,7 @@ export const InboxItem = props => {
       >
         <div className={css.rowNotificationDot}>{rowNotificationDot}</div>
         <div className={css.itemUsername}>{otherUserDisplayName}</div>
-        <div className={css.itemTitle}>{listing?.attributes?.title}</div>
+        <div className={css.itemTitle}>{listingTitle}</div>
         <div className={css.itemDetails}>
           {isBooking ? (
             <BookingTimeInfoMaybe transaction={tx} />

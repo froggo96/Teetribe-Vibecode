@@ -41,7 +41,10 @@ import {
   stripeCustomer,
   confirmPayment,
   initiateInquiryWithoutPayment,
+  createStockReservationTransactions,
+  confirmStockReservationTransactions,
 } from './CheckoutPage.duck';
+import { removeCartAuthorGroup } from '../../ducks/cart.duck';
 
 import CheckoutPageWithPayment, {
   loadInitialDataForStripePayments,
@@ -229,6 +232,7 @@ const mapStateToProps = state => {
     initiateInquiryError,
     initiateOrderError,
     confirmPaymentError,
+    initiateCartChildrenError,
   } = state.CheckoutPage;
   const { currentUser } = state.user;
   const { confirmCardPaymentError, paymentIntent, retrievePaymentIntentError } = state.stripe;
@@ -247,6 +251,7 @@ const mapStateToProps = state => {
     initiateOrderError,
     confirmCardPaymentError,
     confirmPaymentError,
+    initiateCartChildrenError,
     paymentIntent,
     retrievePaymentIntentError,
   };
@@ -265,6 +270,11 @@ const mapDispatchToProps = dispatch => ({
   onConfirmCardPayment: params => dispatch(confirmCardPayment(params)),
   onConfirmPayment: (transactionId, transitionName, transitionParams) =>
     dispatch(confirmPayment(transactionId, transitionName, transitionParams)),
+  onCreateStockReservations: (cartItems, existingChildTransactions) =>
+    dispatch(createStockReservationTransactions(cartItems, existingChildTransactions)),
+  onConfirmStockReservations: childTransactions =>
+    dispatch(confirmStockReservationTransactions(childTransactions)),
+  onClearCartGroup: authorId => dispatch(removeCartAuthorGroup(authorId)),
   onSavePaymentMethod: (stripeCustomer, stripePaymentMethodId) =>
     dispatch(savePaymentMethod(stripeCustomer, stripePaymentMethodId)),
 });

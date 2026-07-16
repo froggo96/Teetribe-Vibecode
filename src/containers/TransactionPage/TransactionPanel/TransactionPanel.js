@@ -13,6 +13,7 @@ import { AvatarLarge, NamedLink, UserDisplayName } from '../../../components';
 import { stateDataShape } from '../TransactionPage.stateData';
 // These are internal components that make this file more readable.
 import BreakdownMaybe from './BreakdownMaybe';
+import CartItemsListMaybe from './CartItemsListMaybe';
 import DetailCardHeadingsMaybe from './DetailCardHeadingsMaybe';
 import DetailCardImage from './DetailCardImage';
 import DeliveryInfoMaybe from './DeliveryInfoMaybe';
@@ -183,6 +184,7 @@ export class TransactionPanelComponent extends Component {
     );
     const priceVariantName =
       protectedData?.priceVariantName || (variantLabels.length ? variantLabels.join(' / ') : null);
+    const cartItems = protectedData?.cartItems;
 
     const classes = classNames(rootClassName || css.root, className);
 
@@ -230,6 +232,7 @@ export class TransactionPanelComponent extends Component {
             {!isInquiryProcess ? (
               <div className={css.orderDetails}>
                 <div className={css.orderDetailsMobileSection}>
+                  <CartItemsListMaybe cartItems={cartItems} />
                   {showBreakDown ? (
                     <BreakdownMaybe
                       orderBreakdown={orderBreakdown}
@@ -327,6 +330,7 @@ export class TransactionPanelComponent extends Component {
                   price={listing?.attributes?.price}
                   intl={intl}
                 />
+                <CartItemsListMaybe cartItems={cartItems} />
                 {showOrderPanel ? orderPanel : null}
                 {showBreakDown ? (
                   <BreakdownMaybe

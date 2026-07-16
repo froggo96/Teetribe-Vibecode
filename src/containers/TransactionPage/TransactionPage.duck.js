@@ -299,6 +299,31 @@ const fetchTransactionPayloadCreator = (
         }
       }
 
+      // A cart order (a single-seller checkout covering multiple listings - see
+      // src/util/cartHelpers.js) needs a thumbnail per item. Variant sibling listings
+      // carry no images of their own (see util/variantHelpers.js), so protectedData.
+      // cartItems tracks an imageListingId per item - usually the primary listing, or the
+      // listing's own id for non-variant products. Fetched separately (not awaited) so a
+      // slow/failed image fetch never blocks the transaction page itself from rendering.
+      const cartItems = transaction.attributes.protectedData?.cartItems;
+      const imageListingIds = Array.isArray(cartItems)
+        ? Array.from(new Set(cartItems.map(ci => ci.imageListingId).filter(Boolean)))
+        : [];
+      if (imageListingIds.length > 0) {
+        sdk.listings
+          .query({
+            ids: imageListingIds.map(imgId => new UUID(imgId)),
+            include: ['images'],
+            ...getImageVariants(config.layout.listingImage),
+          })
+          .then(imagesResponse => {
+            dispatch(addMarketplaceEntities(imagesResponse));
+          })
+          .catch(() => {
+            // Non-critical - the transaction page still works without grafted thumbnails.
+          });
+      }
+
       return response;
     })
     .then(response => {

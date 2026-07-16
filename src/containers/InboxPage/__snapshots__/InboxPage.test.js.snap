@@ -6174,6 +6174,68 @@ exports[`InboxPage InboxItem: default-purchase process with "item" check purchas
 </div>
 `;
 
+exports[`InboxPage InboxItem: default-purchase process with "item" check purchase: transition/expire-payment-from-pending-update 1`] = `
+<div
+  class="item"
+>
+  <div
+    class="itemAvatar"
+  >
+    <a
+      class="root"
+      href="/u/customer"
+      title="customer display name"
+    >
+      <span
+        class="initials"
+      >
+        TT
+      </span>
+    </a>
+  </div>
+  <a
+    class="itemLink"
+    href="/sale/id-purchase-EXPIRE_PAYMENT_FROM_PENDING_UPDATE-sale"
+  >
+    <div
+      class="rowNotificationDot"
+    />
+    <div
+      class="itemUsername"
+    >
+      <span
+        class=""
+      >
+        customer display name
+      </span>
+    </div>
+    <div
+      class="itemTitle"
+    >
+      listing1 title
+    </div>
+    <div
+      class="itemDetails"
+    >
+      <span>
+        InboxPage.quantity
+      </span>
+    </div>
+    <div
+      class="itemState"
+    >
+      <div
+        class="stateName stateNoActionNeeded"
+      >
+        <span>
+          InboxPage.default-purchase.payment-expired.status
+        </span>
+      </div>
+    </div>
+  </a>
+</div>
+`;
+
 exports[`InboxPage InboxItem: default-purchase process with "item" check purchase: transition/expire-provider-review-period 1`] = `
 <div
   class="item"
@@ -7093,6 +7155,68 @@ exports[`InboxPage InboxItem: default-purchase process with "item" check purchas
       >
         <span>
           InboxPage.default-purchase.reviewed.status
+        </span>
+      </div>
+    </div>
+  </a>
+</div>
+`;
+
+exports[`InboxPage InboxItem: default-purchase process with "item" check purchase: transition/update-child-transactions 1`] = `
+<div
+  class="item"
+>
+  <div
+    class="itemAvatar"
+  >
+    <a
+      class="root"
+      href="/u/customer"
+      title="customer display name"
+    >
+      <span
+        class="initials"
+      >
+        TT
+      </span>
+    </a>
+  </div>
+  <a
+    class="itemLink"
+    href="/sale/id-purchase-UPDATE_CHILD_TRANSACTIONS-sale"
+  >
+    <div
+      class="rowNotificationDot"
+    />
+    <div
+      class="itemUsername"
+    >
+      <span
+        class=""
+      >
+        customer display name
+      </span>
+    </div>
+    <div
+      class="itemTitle"
+    >
+      listing1 title
+    </div>
+    <div
+      class="itemDetails"
+    >
+      <span>
+        InboxPage.quantity
+      </span>
+    </div>
+    <div
+      class="itemState"
+    >
+      <div
+        class="stateName stateNoActionNeeded"
+      >
+        <span>
+          InboxPage.default-purchase.pending-update-child-transactions.status
         </span>
       </div>
     </div>

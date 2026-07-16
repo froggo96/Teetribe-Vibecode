@@ -408,6 +408,7 @@ export const ListingPageComponent = props => {
                 [css.imagesEnabled]: showListingImage,
               })}
               listing={resolvedVariantListing || currentListing}
+              variantSelectionIncomplete={hasVariantCombos && !resolvedVariantListing}
               isOwnListing={isOwnListing}
               onSubmit={handleOrderSubmit}
               authorLink={

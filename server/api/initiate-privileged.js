@@ -1,5 +1,6 @@
 const sharetribeSdk = require('sharetribe-flex-sdk');
 const { transactionLineItems } = require('../api-util/lineItems');
+const { cartLineItems, validateCartListings } = require('../api-util/cartLineItems');
 const { isIntentionToMakeOffer } = require('../api-util/negotiation');
 const {
   getSdk,
@@ -9,9 +10,17 @@ const {
   fetchCommission,
 } = require('../api-util/sdk');
 
-const { Money } = sharetribeSdk.types;
+const { Money, UUID } = sharetribeSdk.types;
 
 const listingPromise = (sdk, id) => sdk.listings.show({ id });
+
+const throwBadRequest = (message, code) => {
+  const error = new Error(message);
+  error.status = 400;
+  error.statusText = message;
+  error.data = { code };
+  throw error;
+};
 
 const getFullOrderData = (orderData, bodyParams, currency) => {
   const { offerInSubunits } = orderData || {};
@@ -55,25 +64,52 @@ module.exports = (req, res) => {
   let lineItems = null;
   let metadataMaybe = {};
 
-  Promise.all([listingPromise(sdk, bodyParams?.params?.listingId), fetchCommission(sdk)])
-    .then(([showListingResponse, fetchAssetsResponse]) => {
-      const listing = showListingResponse.data.data;
-      const commissionAsset = fetchAssetsResponse.data.data[0];
+  const isCartOrder = Array.isArray(orderData?.cartItems) && orderData.cartItems.length > 0;
 
-      const currency = listing.attributes.price?.currency || orderData.currency;
+  const cartDataPromise = () => {
+    const ids = orderData.cartItems.map(ci => new UUID(ci.listingId));
+    return Promise.all([
+      sdk.listings.query({ ids, include: ['author'] }),
+      fetchCommission(sdk),
+    ]).then(([listingsResponse, fetchAssetsResponse]) => {
+      const listings = listingsResponse.data.data;
+      const commissionAsset = fetchAssetsResponse.data.data[0];
       const { providerCommission, customerCommission } =
         commissionAsset?.type === 'jsonAsset' ? commissionAsset.attributes.data : {};
 
-      lineItems = transactionLineItems(
-        listing,
-        getFullOrderData(orderData, bodyParams, currency),
-        providerCommission,
-        customerCommission
-      );
-      metadataMaybe = getMetadata(orderData, transitionName);
+      validateCartListings(listings);
+      const mainListingId = bodyParams?.params?.listingId?.uuid;
+      const isMainListingInCart = listings.some(l => l.id.uuid === mainListingId);
+      if (!isMainListingInCart) {
+        throwBadRequest('The main listing is not part of the cart', 'cart-listing-unavailable');
+      }
 
-      return getTrustedSdk(req);
-    })
+      lineItems = cartLineItems(listings, orderData, providerCommission, customerCommission);
+    });
+  };
+
+  const singleListingDataPromise = () =>
+    Promise.all([listingPromise(sdk, bodyParams?.params?.listingId), fetchCommission(sdk)]).then(
+      ([showListingResponse, fetchAssetsResponse]) => {
+        const listing = showListingResponse.data.data;
+        const commissionAsset = fetchAssetsResponse.data.data[0];
+
+        const currency = listing.attributes.price?.currency || orderData.currency;
+        const { providerCommission, customerCommission } =
+          commissionAsset?.type === 'jsonAsset' ? commissionAsset.attributes.data : {};
+
+        lineItems = transactionLineItems(
+          listing,
+          getFullOrderData(orderData, bodyParams, currency),
+          providerCommission,
+          customerCommission
+        );
+        metadataMaybe = getMetadata(orderData, transitionName);
+      }
+    );
+
+  (isCartOrder ? cartDataPromise() : singleListingDataPromise())
+    .then(() => getTrustedSdk(req))
     .then(trustedSdk => {
       const { params } = bodyParams;
 

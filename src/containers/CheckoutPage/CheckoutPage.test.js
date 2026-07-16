@@ -400,6 +400,7 @@ describe('CheckoutPage', () => {
         isClockInSync: false,
         transaction: null,
         confirmPaymentError: null,
+        initiateCartChildrenError: null,
         initiateInquiryError: null,
         initiateInquiryInProgress: false,
       };

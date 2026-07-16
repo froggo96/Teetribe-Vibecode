@@ -1,5 +1,6 @@
 const sharetribeSdk = require('sharetribe-flex-sdk');
 const { transactionLineItems } = require('../api-util/lineItems');
+const { cartLineItems, validateCartListings } = require('../api-util/cartLineItems');
 const {
   addOfferToMetadata,
   getAmountFromPreviousOffer,
@@ -17,7 +18,7 @@ const {
   fetchCommission,
 } = require('../api-util/sdk');
 
-const { Money } = sharetribeSdk.types;
+const { Money, UUID } = sharetribeSdk.types;
 
 const transactionPromise = (sdk, id) => sdk.transactions.show({ id, include: ['listing'] });
 const getListingRelationShip = transactionShowAPIData => {
@@ -121,6 +122,8 @@ module.exports = (req, res) => {
   let lineItems = null;
   let metadataMaybe = {};
 
+  const isCartOrder = Array.isArray(orderData?.cartItems) && orderData.cartItems.length > 0;
+
   Promise.all([transactionPromise(sdk, bodyParams?.id), fetchCommission(sdk)])
     .then(responses => {
       const [showTransactionResponse, fetchAssetsResponse] = responses;
@@ -135,12 +138,26 @@ module.exports = (req, res) => {
       // Check if the transition is related to negotiation offers and if the offers are valid
       throwErrorIfNegotiationOfferHasInvalidHistory(transitionName, existingOffers, transitions);
 
+      const { providerCommission, customerCommission } =
+        commissionAsset?.type === 'jsonAsset' ? commissionAsset.attributes.data : {};
+
+      // A cart order is only ever initiated directly via transition/request-payment (see
+      // initiate-privileged.js) - this branch only exists for parity, in case a cart-of-one
+      // ever arrives here through transition/request-payment-after-inquiry.
+      if (isCartOrder) {
+        const ids = orderData.cartItems.map(ci => new UUID(ci.listingId));
+        return sdk.listings.query({ ids, include: ['author'] }).then(listingsResponse => {
+          const listings = listingsResponse.data.data;
+          validateCartListings(listings);
+          lineItems = cartLineItems(listings, orderData, providerCommission, customerCommission);
+          return getTrustedSdk(req);
+        });
+      }
+
       const currency =
         transaction.attributes.payinTotal?.currency ||
         listing.attributes.price?.currency ||
         orderData.currency;
-      const { providerCommission, customerCommission } =
-        commissionAsset?.type === 'jsonAsset' ? commissionAsset.attributes.data : {};
 
       lineItems = transactionLineItems(
         listing,

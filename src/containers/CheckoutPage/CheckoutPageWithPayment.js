@@ -12,6 +12,7 @@ import { ensureTransaction } from '../../util/data';
 import { createSlug } from '../../util/urlHelpers';
 import { isTransactionInitiateListingNotFoundError } from '../../util/errors';
 import { variantDisplayLabels } from '../../util/variantHelpers';
+import { buildCartItemFromListing } from '../../util/cartHelpers';
 import {
   getProcess,
   isBookingProcessAlias,
@@ -34,12 +35,14 @@ import {
   hasPaymentExpired,
   hasTransactionPassedPendingPayment,
   processCheckoutWithPayment,
+  processCartCheckoutWithPayment,
   setOrderPageInitialValues,
 } from './CheckoutPageTransactionHelpers.js';
 import { getErrorMessages } from './ErrorMessages';
 
 import StripePaymentForm from './StripePaymentForm/StripePaymentForm';
 import DetailsSideCard from './DetailsSideCard';
+import CartDetailsSideCard from './CartDetailsSideCard';
 import MobileListingImage from './MobileListingImage';
 import MobileOrderBreakdown from './MobileOrderBreakdown';
 
@@ -121,6 +124,19 @@ const getOrderParams = (
   const deliveryMethodMaybe = deliveryMethod ? { deliveryMethod } : {};
   const { listingType, unitType, priceVariants } = pageData?.listing?.attributes?.publicData || {};
 
+  // Every default-purchase order (including a plain "buy now") is a cart checkout
+  // internally - a "buy now" is a cart of one. If the buyer came from the cart page,
+  // pageData.orderData.cartItems is already the real (possibly multi-item) cart; otherwise
+  // synthesize a one-item cart from the listing being bought directly.
+  const isPurchaseItem = unitType === 'item';
+  const existingCartItems = pageData.orderData?.cartItems;
+  const cartItems =
+    existingCartItems ||
+    (isPurchaseItem && quantity ? [buildCartItemFromListing(pageData.listing, quantity)] : null);
+  const cartItemsMaybe = cartItems ? { cartItems } : {};
+  const cartAuthorId = pageData.orderData?.cartAuthorId || pageData?.listing?.author?.id?.uuid;
+  const cartAuthorIdMaybe = cartItems && cartAuthorId ? { cartAuthorId } : {};
+
   // price variant data for fixed duration bookings
   const priceVariantName = pageData.orderData?.priceVariantName;
   const priceVariantNameMaybe = priceVariantName ? { priceVariantName } : {};
@@ -137,6 +153,8 @@ const getOrderParams = (
       ...priceVariantMaybe,
       ...transactionFieldProtectedData,
       ...customerDefaultMessageMaybe,
+      ...cartItemsMaybe,
+      ...cartAuthorIdMaybe,
     },
   };
 
@@ -154,6 +172,7 @@ const getOrderParams = (
     ...deliveryMethodMaybe,
     ...quantityMaybe,
     ...seatsMaybe,
+    ...cartItemsMaybe,
     ...bookingDatesMaybe(pageData.orderData?.bookingDates),
     ...priceVariantNameMaybe,
     ...protectedDataMaybe,
@@ -259,12 +278,16 @@ const handleSubmit = (values, process, props, stripe, submitting, setSubmitting)
     onInitiateOrder,
     onConfirmCardPayment,
     onConfirmPayment,
+    onCreateStockReservations,
+    onConfirmStockReservations,
+    onClearCartGroup,
     onSavePaymentMethod,
     onSubmitCallback,
     pageData,
     setPageData,
     sessionStorageKey,
     transactionFieldConfigs = [],
+    processName,
   } = props;
   const { card, message, paymentMethod: selectedPaymentMethod, formValues } = values;
   const { saveAfterOnetimePayment: saveAfterOnetimePaymentRaw } = formValues;
@@ -299,6 +322,8 @@ const handleSubmit = (values, process, props, stripe, submitting, setSubmitting)
     onInitiateOrder,
     onConfirmCardPayment,
     onConfirmPayment,
+    onCreateStockReservations,
+    onConfirmStockReservations,
     onSavePaymentMethod,
     sessionStorageKey,
     stripeCustomer: currentUser?.stripeCustomer,
@@ -329,8 +354,14 @@ const handleSubmit = (values, process, props, stripe, submitting, setSubmitting)
     message
   );
 
+  // Every default-purchase order (a "buy now" included, as a cart of one) goes through the
+  // cart checkout sequence - see processCartCheckoutWithPayment's doc comment. Other
+  // processes (booking, negotiation) are unaffected.
+  const isPurchase = processName === PURCHASE_PROCESS_NAME;
+  const checkoutFn = isPurchase ? processCartCheckoutWithPayment : processCheckoutWithPayment;
+
   // There are multiple XHR calls that needs to be made against Stripe API and Sharetribe Marketplace API on checkout with payments
-  processCheckoutWithPayment(orderParams, requestPaymentParams)
+  checkoutFn(orderParams, requestPaymentParams)
     .then(response => {
       const { orderId, paymentMethodSaved } = response;
       setSubmitting(false);
@@ -343,6 +374,15 @@ const handleSubmit = (values, process, props, stripe, submitting, setSubmitting)
       };
 
       setOrderPageInitialValues(initialValues, routeConfiguration, dispatch);
+
+      // Remove the just-purchased seller group from the cart. Buy-now orders never came
+      // from the cart page (fromCart is only set by CartPage's checkout handler), so
+      // nothing needs clearing for them.
+      const { fromCart, cartAuthorId } = pageData.orderData || {};
+      if (fromCart && cartAuthorId) {
+        onClearCartGroup(cartAuthorId);
+      }
+
       onSubmitCallback();
       history.push(orderDetailsPath);
     })
@@ -357,12 +397,14 @@ const onStripeInitialized = (stripe, process, props) => {
   const tx = pageData?.transaction || null;
 
   // We need to get up to date PI, if payment is pending but it's not expired.
+  // A cart checkout's parent transaction briefly sits in pending-update-child-transactions
+  // (after request-payment, before confirm-payment) - the PI still needs to be fetched then too.
+  const txState = process?.getState(tx);
+  const isPendingPaymentLike =
+    txState === process?.states.PENDING_PAYMENT ||
+    txState === process?.states.PENDING_UPDATE_CHILD_TRANSACTIONS;
   const shouldFetchPaymentIntent =
-    stripe &&
-    !paymentIntent &&
-    tx?.id &&
-    process?.getState(tx) === process?.states.PENDING_PAYMENT &&
-    !hasPaymentExpired(tx, process);
+    stripe && !paymentIntent && tx?.id && isPendingPaymentLike && !hasPaymentExpired(tx, process);
 
   if (shouldFetchPaymentIntent) {
     const { stripePaymentIntentClientSecret } =
@@ -425,6 +467,7 @@ export const CheckoutPageWithPayment = props => {
     isClockInSync,
     initiateOrderError,
     confirmPaymentError,
+    initiateCartChildrenError,
     intl,
     currentUser,
     confirmCardPaymentError,
@@ -454,6 +497,14 @@ export const CheckoutPageWithPayment = props => {
   const { listing, transaction, orderData } = pageData;
   const existingTransaction = ensureTransaction(transaction);
   const speculatedTransaction = ensureTransaction(speculatedTransactionMaybe, {}, null);
+
+  // A cart order is a single-seller checkout covering multiple listings (see
+  // src/util/cartHelpers.js) - orderData.cartItems is set immediately at navigation time
+  // (before any transaction exists), so it's used directly rather than reading it back off
+  // the transaction's protectedData. A "buy now" purchase is a cart of one and is displayed
+  // the same way a regular single-listing purchase always has been.
+  const cartItems = orderData?.cartItems;
+  const isCartOrder = cartItems?.length > 1;
 
   // If existing transaction has line-items, it has gone through one of the request-payment transitions.
   // Otherwise, we try to rely on speculatedTransaction for order breakdown data.
@@ -526,6 +577,22 @@ export const CheckoutPageWithPayment = props => {
     speculateTransactionError,
     listingLink
   );
+
+  // A cart order's stock reservation failed for one or more listings (e.g. sold out or
+  // removed between speculation and checkout) - the card was never charged.
+  const failedCartListingIds = initiateCartChildrenError?.failedListingIds || [];
+  const failedCartItemNames = failedCartListingIds
+    .map(id => (orderData?.cartItems || []).find(ci => ci.listingId === id)?.title)
+    .filter(Boolean);
+  const cartChildrenErrorMessage =
+    failedCartListingIds.length > 0 ? (
+      <p className={css.orderError}>
+        <FormattedMessage
+          id="CheckoutPage.cartChildrenError"
+          values={{ items: failedCartItemNames.join(', ') || failedCartListingIds.length }}
+        />
+      </p>
+    ) : null;
 
   const isBooking = processName === BOOKING_PROCESS_NAME;
   const isPurchase = processName === PURCHASE_PROCESS_NAME;
@@ -607,7 +674,14 @@ export const CheckoutPageWithPayment = props => {
               {title}
             </H3>
             <H4 as="h2" className={css.detailsHeadingMobile}>
-              <FormattedMessage id="CheckoutPage.listingTitle" values={{ listingTitle }} />
+              {isCartOrder ? (
+                <FormattedMessage
+                  id="CartDetailsSideCard.mobileItemCount"
+                  values={{ count: cartItems.length }}
+                />
+              ) : (
+                <FormattedMessage id="CheckoutPage.listingTitle" values={{ listingTitle }} />
+              )}
             </H4>
           </div>
           <MobileOrderBreakdown
@@ -617,6 +691,7 @@ export const CheckoutPageWithPayment = props => {
           />
           <section className={css.paymentContainer}>
             {errorMessages.initiateOrderErrorMessage}
+            {cartChildrenErrorMessage}
             {errorMessages.listingNotFoundErrorMessage}
             {errorMessages.speculateErrorMessage}
             {errorMessages.retrievePaymentIntentErrorMessage}
@@ -665,20 +740,33 @@ export const CheckoutPageWithPayment = props => {
           </section>
         </main>
 
-        <DetailsSideCard
-          listing={listing}
-          listingTitle={listingTitle}
-          priceVariantName={priceVariantName}
-          author={listing?.author}
-          firstImage={firstImage}
-          layoutListingImageConfig={config.layout.listingImage}
-          speculateTransactionErrorMessage={errorMessages.speculateTransactionErrorMessage}
-          isInquiryProcess={false}
-          processName={processName}
-          breakdown={breakdown}
-          showListingImage={showListingImage}
-          intl={intl}
-        />
+        {isCartOrder ? (
+          <CartDetailsSideCard
+            cartItems={cartItems}
+            author={listing?.author}
+            firstImage={firstImage}
+            layoutListingImageConfig={config.layout.listingImage}
+            speculateTransactionErrorMessage={errorMessages.speculateTransactionErrorMessage}
+            processName={processName}
+            breakdown={breakdown}
+            showListingImage={showListingImage}
+          />
+        ) : (
+          <DetailsSideCard
+            listing={listing}
+            listingTitle={listingTitle}
+            priceVariantName={priceVariantName}
+            author={listing?.author}
+            firstImage={firstImage}
+            layoutListingImageConfig={config.layout.listingImage}
+            speculateTransactionErrorMessage={errorMessages.speculateTransactionErrorMessage}
+            isInquiryProcess={false}
+            processName={processName}
+            breakdown={breakdown}
+            showListingImage={showListingImage}
+            intl={intl}
+          />
+        )}
       </div>
     </Page>
   );

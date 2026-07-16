@@ -108,6 +108,14 @@ export const transactionLineItems = body => {
   return post('/api/transaction-line-items', body);
 };
 
+// Fetch estimated line items for a whole cart seller-group from the local API endpoint.
+//
+// See `server/api/cart-transaction-line-items.js` to see what data should
+// be sent in the body.
+export const cartTransactionLineItems = body => {
+  return post('/api/cart-transaction-line-items', body);
+};
+
 // Initiate a privileged transaction.
 //
 // With privileged transitions, the transactions need to be created
@@ -155,4 +163,9 @@ export const deleteUserAccount = body => {
 // Save the current user's favorite listing ids (see server/api/toggle-favorite.js).
 export const toggleFavoriteListing = body => {
   return post('/api/toggle-favorite', body);
+};
+
+// Save the current user's shopping cart (see server/api/update-cart.js).
+export const updateUserCart = body => {
+  return post('/api/update-cart', body);
 };

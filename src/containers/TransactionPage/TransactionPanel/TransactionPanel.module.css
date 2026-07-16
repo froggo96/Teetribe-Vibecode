@@ -512,3 +512,24 @@
     margin-top: 16px;
   }
 }
+
+.cartItemsList {
+  margin: 16px 0;
+}
+
+.cartItemsListHeading {
+  composes: h5 from global;
+  margin: 0 0 8px 0;
+}
+
+.cartItemsListItems {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cartItemsListItem {
+  composes: p from global;
+  margin: 0 0 4px 0;
+  color: var(--colorGrey700);
+}

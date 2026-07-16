@@ -305,6 +305,7 @@ const OrderPanel = props => {
     fetchLineItemsError,
     payoutDetailsWarning,
     showListingImage,
+    variantSelectionIncomplete,
   } = props;
 
   const publicData = listing?.attributes?.publicData || {};
@@ -529,6 +530,9 @@ const OrderPanel = props => {
             shippingEnabled={shippingEnabled && displayShipping}
             displayDeliveryMethod={displayPickup || displayShipping}
             onContactUser={onContactUser}
+            listing={listing}
+            showAddToCart
+            variantSelectionIncomplete={variantSelectionIncomplete}
             {...sharedProps}
           />
         ) : showInquiryForm ? (

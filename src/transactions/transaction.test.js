@@ -7,6 +7,8 @@ import {
   CONDITIONAL_RESOLVER_WILDCARD,
   ConditionalResolver,
   getProcess,
+  getSupportedProcessesInfo,
+  CART_STOCK_PROCESS_NAME,
 } from './transaction';
 
 describe('transaction utils for default-purchase', () => {
@@ -101,6 +103,75 @@ describe('transaction utils for default-purchase', () => {
     it('txHasBeenReceived(txReviewed) succeeds', () => {
       expect(txHasBeenReceived(txReviewed)).toEqual(true);
     });
+  });
+});
+
+describe('default-purchase cart-checkout state wiring', () => {
+  const process = getProcess('default-purchase');
+  const { transitions, states } = process;
+
+  it('update-child-transactions moves pending-payment to pending-update-child-transactions', () => {
+    expect(process.getStateAfterTransition(transitions.UPDATE_CHILD_TRANSACTIONS)).toEqual(
+      states.PENDING_UPDATE_CHILD_TRANSACTIONS
+    );
+  });
+
+  it('confirm-payment moves pending-update-child-transactions to purchased', () => {
+    expect(process.getStateAfterTransition(transitions.CONFIRM_PAYMENT)).toEqual(states.PURCHASED);
+  });
+
+  it('both expire-payment transitions lead to payment-expired', () => {
+    expect(process.getStateAfterTransition(transitions.EXPIRE_PAYMENT)).toEqual(
+      states.PAYMENT_EXPIRED
+    );
+    expect(process.getStateAfterTransition(transitions.EXPIRE_PAYMENT_FROM_PENDING_UPDATE)).toEqual(
+      states.PAYMENT_EXPIRED
+    );
+  });
+
+  it('both expire-payment transitions are refunded transitions', () => {
+    expect(process.isRefunded(transitions.EXPIRE_PAYMENT)).toBe(true);
+    expect(process.isRefunded(transitions.EXPIRE_PAYMENT_FROM_PENDING_UPDATE)).toBe(true);
+  });
+
+  it('request-payment and request-payment-after-inquiry remain the only privileged transitions', () => {
+    expect(process.isPrivileged(transitions.REQUEST_PAYMENT)).toBe(true);
+    expect(process.isPrivileged(transitions.REQUEST_PAYMENT_AFTER_INQUIRY)).toBe(true);
+    expect(process.isPrivileged(transitions.UPDATE_CHILD_TRANSACTIONS)).toBe(false);
+    expect(process.isPrivileged(transitions.CONFIRM_PAYMENT)).toBe(false);
+  });
+});
+
+describe('cart-stock-process (child process)', () => {
+  it('getProcess resolves the child process graph', () => {
+    const process = getProcess(CART_STOCK_PROCESS_NAME);
+    expect(process.graph.id).toEqual('cart-stock-process/release-1');
+    expect(
+      process.getStateAfterTransition(process.transitions.REQUEST_STOCK_RESERVATION)
+    ).toEqual(process.states.PENDING);
+    expect(
+      process.getStateAfterTransition(process.transitions.CONFIRM_STOCK_RESERVATION)
+    ).toEqual(process.states.RESERVED);
+    expect(
+      process.getStateAfterTransition(process.transitions.EXPIRE_STOCK_RESERVATION)
+    ).toEqual(process.states.EXPIRED);
+  });
+
+  it('is never privileged, refunded, or a relevant past transition', () => {
+    const process = getProcess(CART_STOCK_PROCESS_NAME);
+    expect(process.isPrivileged(process.transitions.REQUEST_STOCK_RESERVATION)).toBe(false);
+    expect(process.isRefunded(process.transitions.EXPIRE_STOCK_RESERVATION)).toBe(false);
+    expect(process.isRelevantPastTransition(process.transitions.CONFIRM_STOCK_RESERVATION)).toBe(
+      false
+    );
+  });
+
+  it('is excluded from getSupportedProcessesInfo, unlike the four user-facing processes', () => {
+    const supportedNames = getSupportedProcessesInfo().map(p => p.name);
+    expect(supportedNames).not.toContain(CART_STOCK_PROCESS_NAME);
+    expect(supportedNames).toEqual(
+      expect.arrayContaining(['default-purchase', 'default-booking', 'default-inquiry', 'default-negotiation'])
+    );
   });
 });
 

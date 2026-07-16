@@ -12,6 +12,7 @@ import {
   FieldTextInput,
   InlineTextButton,
   PrimaryButton,
+  AddToCartButton,
   H3,
   H6,
 } from '../../../components';
@@ -134,6 +135,9 @@ const renderForm = formRenderProps => {
     payoutDetailsWarning,
     marketplaceName,
     values,
+    listing,
+    showAddToCart,
+    variantSelectionIncomplete,
   } = formRenderProps;
 
   // Note: don't add custom logic before useEffect
@@ -286,6 +290,13 @@ const renderForm = formRenderProps => {
           )}
         </PrimaryButton>
       </div>
+      {showAddToCart && !isOwnListing && (variantSelectionIncomplete || hasStock) ? (
+        <AddToCartButton
+          listing={listing}
+          currentStock={currentStock}
+          disabled={variantSelectionIncomplete}
+        />
+      ) : null}
       <p className={css.finePrint}>
         {payoutDetailsWarning ? (
           payoutDetailsWarning

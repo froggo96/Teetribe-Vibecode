@@ -431,6 +431,7 @@ export const ListingPageComponent = props => {
             <OrderPanel
               className={css.orderPanel}
               listing={resolvedVariantListing || currentListing}
+              variantSelectionIncomplete={hasVariantCombos && !resolvedVariantListing}
               isOwnListing={isOwnListing}
               onSubmit={handleOrderSubmit}
               authorLink={

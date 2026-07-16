@@ -297,6 +297,23 @@
   }
 }
 
+.cartItemsList {
+  display: none;
+  list-style: none;
+  margin: 8px 0 0 0;
+  padding: 0;
+
+  @media (--viewportLarge) {
+    display: block;
+  }
+}
+
+.cartItemsListItem {
+  composes: p from global;
+  margin: 0 0 4px 0;
+  color: var(--colorGrey700);
+}
+
 .detailsSubtitle {
   composes: h5 from global;
 

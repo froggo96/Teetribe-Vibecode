@@ -30,9 +30,9 @@ const toggleFavoritePayloadCreator = (listingId, { getState, dispatch, rejectWit
     ? favoriteListingIds.filter(id => id !== listingId)
     : [...favoriteListingIds, listingId];
 
-  // NOTE: this overwrites privateData entirely. Since favoriteListingIds is
-  // the only privateData key in use today, this is safe - if another feature
-  // starts using privateData, this call needs to merge with the existing value instead.
+  // NOTE: the Marketplace API merges privateData by top-level key, so this
+  // only ever replaces the favoriteListingIds key - other privateData keys
+  // (e.g. cart, see cart.duck.js) are left untouched.
   return toggleFavoriteListing({ favoriteListingIds: nextFavoriteListingIds })
     .then(response => {
       const entities = denormalisedResponseEntities(response);

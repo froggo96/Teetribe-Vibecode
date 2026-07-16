@@ -142,9 +142,17 @@ export const hasDefaultPaymentMethod = (stripeCustomerFetched, currentUser) =>
  */
 export const hasPaymentExpired = (existingTransaction, process, isClockInSync) => {
   const state = process.getState(existingTransaction);
+  // default-purchase cart checkouts pass through an extra pending-update-child-transactions
+  // state between pending-payment and purchased (see transactionProcessPurchase.js) - it uses
+  // the same 15-minute payment window, so it's treated the same way here. Other processes
+  // don't define this state, so process.states.PENDING_UPDATE_CHILD_TRANSACTIONS is simply
+  // undefined for them and this check never matches.
+  const isPendingPaymentLike =
+    state === process.states.PENDING_PAYMENT ||
+    state === process.states.PENDING_UPDATE_CHILD_TRANSACTIONS;
   return state === process.states.PAYMENT_EXPIRED
     ? true
-    : state === process.states.PENDING_PAYMENT && isClockInSync
+    : isPendingPaymentLike && isClockInSync
     ? minutesBetween(existingTransaction.attributes.lastTransitionedAt, new Date()) >= 15
     : false;
 };
@@ -336,6 +344,230 @@ export const processCheckoutWithPayment = (orderParams, extraPaymentParams) => {
     fnRequestPayment,
     fnConfirmCardPayment,
     fnConfirmPayment,
+    fnSavePaymentMethod
+  );
+
+  return handlePaymentIntentCreation(orderParams);
+};
+
+/**
+ * Create call sequence for checking out a shopping cart (or a single "buy now" order, which
+ * is a cart of one) on the default-purchase process.
+ *
+ * This mirrors processCheckoutWithPayment's 4 steps, plus 3 more that manage one child
+ * transaction per cart listing (see transactionProcessCartStock.js) so stock is reserved
+ * for every listing independently of the parent transaction's own payment lifecycle:
+ *   1. request payment on the parent transaction (same as processCheckoutWithPayment)
+ *   2. create a stock-reservation child transaction per cart listing
+ *   3. write the created child transaction ids onto the parent's protectedData
+ *   4. pay using Stripe SDK (same as processCheckoutWithPayment)
+ *   5. confirm payment on the parent transaction (same as processCheckoutWithPayment)
+ *   6. confirm every child's stock reservation (never fails checkout - the sale already happened)
+ *   7. optionally save the card as the default payment method (same as processCheckoutWithPayment)
+ *
+ * A failure in step 2 aborts checkout before the card is charged: the customer sees which
+ * listing(s) failed and nothing has been paid. The parent transaction and any children
+ * created so far are simply left to expire on their own.
+ *
+ * @param {Object} orderParams contains params for the initial order itself, including cartItems
+ * @param {Object} extraPaymentParams contains extra params needed by one of the following calls in the checkout sequence
+ * @returns Promise that goes through each step in the checkout sequence.
+ */
+export const processCartCheckoutWithPayment = (orderParams, extraPaymentParams) => {
+  const {
+    hasPaymentIntentUserActionsDone,
+    isPaymentFlowUseSavedCard,
+    isPaymentFlowPayAndSaveCard,
+    onConfirmCardPayment,
+    onConfirmPayment,
+    onInitiateOrder,
+    onCreateStockReservations,
+    onConfirmStockReservations,
+    onSavePaymentMethod,
+    pageData,
+    paymentIntent,
+    process,
+    setPageData,
+    sessionStorageKey,
+    stripeCustomer,
+    stripePaymentMethodId,
+  } = extraPaymentParams;
+  const storedTx = ensureTransaction(pageData.transaction);
+
+  const ensuredStripeCustomer = ensureStripeCustomer(stripeCustomer);
+  const processAlias = pageData?.listing?.attributes?.publicData?.transactionProcessAlias;
+
+  let createdPaymentIntent = null;
+  // Resumability: a page refresh mid-checkout re-derives already-created children from the
+  // parent transaction's own protectedData, rather than losing track of them.
+  let childTransactions = storedTx?.attributes?.protectedData?.childTransactions || {};
+
+  ////////////////////////////////////////////////
+  // Step 1: initiate order                     //
+  // by requesting payment from Marketplace API //
+  ////////////////////////////////////////////////
+  const fnRequestPayment = fnParams => {
+    // fnParams should be { listingId, deliveryMethod?, cartItems, paymentMethod?.setupPaymentMethodForSaving?, protectedData }
+    const hasPaymentIntents = storedTx.attributes.protectedData?.stripePaymentIntents;
+    const requestTransition = process.transitions.REQUEST_PAYMENT;
+    const isPrivileged = process.isPrivileged(requestTransition);
+
+    // If paymentIntent exists, order has been initiated previously.
+    const orderPromise = hasPaymentIntents
+      ? Promise.resolve(storedTx)
+      : onInitiateOrder(fnParams, processAlias, storedTx.id, requestTransition, isPrivileged);
+
+    orderPromise.then(order => {
+      persistTransaction(order, pageData, storeData, setPageData, sessionStorageKey);
+    });
+
+    return orderPromise;
+  };
+
+  //////////////////////////////////////////////////////////
+  // Step 2: create one stock-reservation child per cart   //
+  // listing (listings already reserved from a previous,   //
+  // partially-successful attempt are skipped)             //
+  //////////////////////////////////////////////////////////
+  const fnCreateStockReservations = order => {
+    return onCreateStockReservations(orderParams.cartItems, childTransactions).then(created => {
+      childTransactions = created;
+      return order;
+    });
+  };
+
+  ///////////////////////////////////////////////////////////////
+  // Step 3: write the child transaction ids onto the parent's //
+  // protectedData, moving it past pending-payment              //
+  ///////////////////////////////////////////////////////////////
+  const fnUpdateChildTransactions = order => {
+    const isTransitionedAlready = process.hasPassedState(
+      process.states.PENDING_UPDATE_CHILD_TRANSACTIONS,
+      storedTx
+    );
+    const orderPromise = isTransitionedAlready
+      ? Promise.resolve(order)
+      : onConfirmPayment(order.id, process.transitions.UPDATE_CHILD_TRANSACTIONS, {
+          protectedData: { childTransactions },
+        });
+
+    orderPromise.then(updatedOrder => {
+      persistTransaction(updatedOrder, pageData, storeData, setPageData, sessionStorageKey);
+    });
+
+    return orderPromise;
+  };
+
+  //////////////////////////////////
+  // Step 4: pay using Stripe SDK //
+  //////////////////////////////////
+  const fnConfirmCardPayment = fnParams => {
+    // fnParams should be returned transaction entity
+    const order = fnParams;
+
+    const hasPaymentIntents = order?.attributes?.protectedData?.stripePaymentIntents;
+    if (!hasPaymentIntents) {
+      throw new Error(
+        `Missing StripePaymentIntents key in transaction's protectedData. Check that your transaction process is configured to use payment intents.`
+      );
+    }
+
+    const { stripePaymentIntentClientSecret } = hasPaymentIntents
+      ? order.attributes.protectedData.stripePaymentIntents.default
+      : null;
+
+    const { stripe, card, billingDetails, paymentIntent } = extraPaymentParams;
+    const stripeElementMaybe = !isPaymentFlowUseSavedCard ? { card } : {};
+
+    // Note: For basic USE_SAVED_CARD scenario, we have set it already on API side, when PaymentIntent was created.
+    // However, the payment_method is save here for USE_SAVED_CARD flow if customer first attempted onetime payment
+    const paymentParams = !isPaymentFlowUseSavedCard
+      ? {
+          payment_method: {
+            billing_details: billingDetails,
+            card: card,
+          },
+        }
+      : { payment_method: stripePaymentMethodId };
+
+    const params = {
+      stripePaymentIntentClientSecret,
+      orderId: order?.id,
+      stripe,
+      ...stripeElementMaybe,
+      paymentParams,
+    };
+
+    return hasPaymentIntentUserActionsDone
+      ? Promise.resolve({ transactionId: order?.id, paymentIntent })
+      : onConfirmCardPayment(params);
+  };
+
+  ///////////////////////////////////////////////////
+  // Step 5: complete order                        //
+  // by confirming payment against Marketplace API //
+  ///////////////////////////////////////////////////
+  const fnConfirmPayment = fnParams => {
+    // fnParams should contain { paymentIntent, transactionId } returned in step 4
+    // Remember the created PaymentIntent for step 7
+    createdPaymentIntent = fnParams.paymentIntent;
+    const transactionId = fnParams.transactionId;
+    const transitionName = process.transitions.CONFIRM_PAYMENT;
+    const isTransitionedAlready = storedTx?.attributes?.lastTransition === transitionName;
+    const orderPromise = isTransitionedAlready
+      ? Promise.resolve(storedTx)
+      : onConfirmPayment(transactionId, transitionName, {});
+
+    orderPromise.then(order => {
+      persistTransaction(order, pageData, storeData, setPageData, sessionStorageKey);
+    });
+
+    return orderPromise;
+  };
+
+  ///////////////////////////////////////////////////////////
+  // Step 6: confirm every child's stock reservation       //
+  // (never fails checkout - the sale already happened by //
+  // this point)                                          //
+  ///////////////////////////////////////////////////////////
+  const fnConfirmStockReservations = order => {
+    return onConfirmStockReservations(childTransactions).then(() => order);
+  };
+
+  //////////////////////////////////////////////////////////
+  // Step 7: optionally save card as defaultPaymentMethod //
+  //////////////////////////////////////////////////////////
+  const fnSavePaymentMethod = fnParams => {
+    const pi = createdPaymentIntent || paymentIntent;
+    const orderId = fnParams?.id;
+
+    if (isPaymentFlowPayAndSaveCard) {
+      return onSavePaymentMethod(ensuredStripeCustomer, pi.payment_method)
+        .then(response => {
+          if (response.errors) {
+            return { orderId, paymentMethodSaved: false };
+          }
+          return { orderId, paymentMethodSaved: true };
+        })
+        .catch(e => {
+          // Real error cases are catched already in paymentMethods page.
+          return { orderId, paymentMethodSaved: false };
+        });
+    } else {
+      return Promise.resolve({ orderId, paymentMethodSaved: true });
+    }
+  };
+
+  // Here we create promise calls in sequence
+  const applyAsync = (acc, val) => acc.then(val);
+  const composeAsync = (...funcs) => x => funcs.reduce(applyAsync, Promise.resolve(x));
+  const handlePaymentIntentCreation = composeAsync(
+    fnRequestPayment,
+    fnCreateStockReservations,
+    fnUpdateChildTransactions,
+    fnConfirmCardPayment,
+    fnConfirmPayment,
+    fnConfirmStockReservations,
     fnSavePaymentMethod
   );
 

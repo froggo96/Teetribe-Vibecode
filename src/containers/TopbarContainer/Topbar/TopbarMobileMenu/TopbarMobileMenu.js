@@ -4,10 +4,12 @@
  */
 import React from 'react';
 import classNames from 'classnames';
+import { useSelector } from 'react-redux';
 
 import { ACCOUNT_SETTINGS_PAGES } from '../../../../routing/routeConfiguration';
 import { FormattedMessage } from '../../../../util/reactIntl';
 import { ensureCurrentUser } from '../../../../util/data';
+import { selectCartTotalCount } from '../../../../ducks/cart.duck';
 
 import {
   AvatarLarge,
@@ -83,6 +85,11 @@ const TopbarMobileMenu = props => {
     showCreateListingsLink,
   } = props;
 
+  // Called unconditionally (before the early return below) since this component can
+  // re-render in place as isAuthenticated flips, without unmounting - hooks can't be
+  // called conditionally.
+  const cartCount = useSelector(selectCartTotalCount);
+
   const user = ensureCurrentUser(currentUser);
 
   const extraLinks = customLinks.map((linkConfig, index) => {
@@ -146,6 +153,9 @@ const TopbarMobileMenu = props => {
       <NotificationBadge className={css.notificationBadge} count={notificationCount} />
     ) : null;
 
+  const cartCountBadge =
+    cartCount > 0 ? <NotificationBadge className={css.notificationBadge} count={cartCount} /> : null;
+
   const displayName = user.attributes.profile.firstName;
   const currentPageClass = page => {
     const isAccountSettingsPage =
@@ -181,6 +191,12 @@ const TopbarMobileMenu = props => {
             </NamedLink>
           </li>
           {manageListingsLinkMaybe}
+          <li className={classNames(css.navigationLink, currentPageClass('CartPage'))}>
+            <NamedLink name="CartPage">
+              <FormattedMessage id="TopbarMobileMenu.cartLink" />
+              {cartCountBadge}
+            </NamedLink>
+          </li>
           <li className={classNames(css.navigationLink, currentPageClass('FavoriteListingsPage'))}>
             <NamedLink name="FavoriteListingsPage">
               <FormattedMessage id="TopbarMobileMenu.favoritesLink" />

@@ -307,3 +307,13 @@
     }
   }
 }
+
+.cartIcon {
+  width: 20px;
+  height: 20px;
+  vertical-align: middle;
+}
+
+.cartBadge {
+  vertical-align: middle;
+}

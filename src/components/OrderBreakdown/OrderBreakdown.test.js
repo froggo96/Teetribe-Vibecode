@@ -92,6 +92,85 @@ describe('OrderBreakdown', () => {
     expect(totalPayIn.getByText('30')).toBeInTheDocument();
   });
 
+  it('shows a buy-now (cart of one) the same way as a regular single-item purchase', () => {
+    render(
+      <OrderBreakdownComponent
+        userRole="customer"
+        currency="USD"
+        marketplaceName={marketplaceName}
+        transaction={exampleTransaction({
+          payinTotal: new Money(1000, 'USD'),
+          payoutTotal: new Money(1000, 'USD'),
+          protectedData: {
+            cartItems: [{ listingId: 'listing-1', title: 'Solo tee', quantity: 1 }],
+          },
+          lineItems: [
+            {
+              code: 'line-item/item',
+              includeFor: ['customer', 'provider'],
+              quantity: new Decimal(1),
+              lineTotal: new Money(1000, 'USD'),
+              unitPrice: new Money(1000, 'USD'),
+              reversal: false,
+            },
+          ],
+        })}
+        intl={fakeIntl}
+      />
+    );
+
+    expect(screen.getByText('OrderBreakdown.baseUnitQuantity')).toBeInTheDocument();
+    expect(screen.queryByText('OrderBreakdown.cartItemLine')).not.toBeInTheDocument();
+  });
+
+  it('labels each item by title for a multi-item cart order', () => {
+    render(
+      <OrderBreakdownComponent
+        userRole="customer"
+        currency="USD"
+        marketplaceName={marketplaceName}
+        transaction={exampleTransaction({
+          payinTotal: new Money(3000, 'USD'),
+          payoutTotal: new Money(3000, 'USD'),
+          protectedData: {
+            cartItems: [
+              { listingId: 'listing-1', title: 'Red tee', quantity: 1 },
+              { listingId: 'listing-2', title: 'Blue tee', quantity: 2 },
+            ],
+          },
+          lineItems: [
+            {
+              code: 'line-item/item',
+              includeFor: ['customer', 'provider'],
+              quantity: new Decimal(1),
+              lineTotal: new Money(1000, 'USD'),
+              unitPrice: new Money(1000, 'USD'),
+              reversal: false,
+            },
+            {
+              code: 'line-item/item',
+              includeFor: ['customer', 'provider'],
+              quantity: new Decimal(2),
+              lineTotal: new Money(2000, 'USD'),
+              unitPrice: new Money(1000, 'USD'),
+              reversal: false,
+            },
+          ],
+        })}
+        intl={fakeIntl}
+      />
+    );
+
+    const cartItemLines = screen.getAllByText('OrderBreakdown.cartItemLine');
+    expect(cartItemLines).toHaveLength(2);
+    expect(screen.queryByText('OrderBreakdown.baseUnitQuantity')).not.toBeInTheDocument();
+
+    // Each item line's own total ($10, then $20), plus the overall transaction total ($30).
+    expect(screen.getAllByText('10')).toHaveLength(1);
+    expect(screen.getAllByText('20')).toHaveLength(1);
+    expect(screen.getAllByText('30')).toHaveLength(1);
+  });
+
   it('shows base price, booking dates, customer-commission and total to customer (booking)', () => {
     render(
       <OrderBreakdownComponent

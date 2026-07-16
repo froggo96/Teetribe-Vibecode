@@ -1,0 +1,86 @@
+@import '../../styles/customMediaQueries.css';
+
+.content {
+  width: 100%;
+  margin: 24px auto 0 auto;
+  padding: 0 24px;
+
+  @media (--viewportMedium) {
+    margin: 48px auto 0 auto;
+  }
+
+  @media (--viewportLarge) {
+    margin: 72px auto 0 auto;
+    max-width: calc(var(--contentMaxWidth) + 72px);
+    padding: 0 36px;
+  }
+
+  @media (--viewportXLarge) {
+    max-width: var(--contentMaxWidth);
+  }
+}
+
+.noResultsContainer {
+  margin: 0;
+}
+
+.heading {
+  margin: 0 0 24px 0;
+
+  @media (--viewportMedium) {
+    margin: 0 0 32px 0;
+  }
+}
+
+.headingNoListings {
+  margin: 0 0 12px 0;
+}
+
+.browseListingsLink {
+  color: var(--marketplaceColor);
+  text-decoration: underline;
+
+  &:hover {
+    color: var(--marketplaceColorDark);
+    text-decoration: underline;
+  }
+}
+
+.group {
+  max-width: 640px;
+  margin-bottom: 48px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--colorGrey100);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.groupHeading {
+  margin: 0 0 12px 0;
+}
+
+.cards {
+  margin-bottom: 12px;
+}
+
+.breakdownWrapper {
+  margin: 16px 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--colorGrey100);
+}
+
+.breakdownError {
+  color: var(--colorFail);
+}
+
+.checkoutButton {
+  margin-top: 16px;
+}
+
+.checkoutHint {
+  margin: 8px 0 0 0;
+  font-size: 13px;
+  color: var(--colorGrey300);
+}

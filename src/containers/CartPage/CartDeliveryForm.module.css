@@ -1,0 +1,24 @@
+.root {
+  margin: 12px 0;
+}
+
+.label {
+  display: block;
+  composes: label from global;
+  margin-bottom: 6px;
+}
+
+.select {
+  width: 100%;
+  max-width: 320px;
+}
+
+.singleMethod {
+  margin: 0;
+  font-weight: var(--fontWeightMedium);
+}
+
+.noSharedMethod {
+  margin: 12px 0;
+  color: var(--colorFail);
+}

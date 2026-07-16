@@ -4,6 +4,7 @@
 import { loadData as AuthenticationPageLoader } from './AuthenticationPage/AuthenticationPage.duck';
 import { loadData as LandingPageLoader } from './LandingPage/LandingPage.duck';
 import { setInitialValues as CheckoutPageInitialValues } from './CheckoutPage/CheckoutPage.duck';
+import { loadData as CartPageLoader } from './CartPage/CartPage.duck';
 import { loadData as CMSPageLoader } from './CMSPage/CMSPage.duck';
 import { loadData as ContactDetailsPageLoader } from './ContactDetailsPage/ContactDetailsPage.duck';
 import { loadData as EditListingPageLoader } from './EditListingPage/EditListingPage.duck';
@@ -50,6 +51,9 @@ const getPageDataLoadingAPI = () => {
     },
     FavoriteListingsPage: {
       loadData: FavoriteListingsPageLoader,
+    },
+    CartPage: {
+      loadData: CartPageLoader,
     },
     InboxPage: {
       loadData: InboxPageLoader,

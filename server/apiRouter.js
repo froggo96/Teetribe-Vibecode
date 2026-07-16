@@ -13,10 +13,12 @@ const { deserialize } = require('./api-util/sdk');
 const initiateLoginAs = require('./api/initiate-login-as');
 const loginAs = require('./api/login-as');
 const transactionLineItems = require('./api/transaction-line-items');
+const cartTransactionLineItems = require('./api/cart-transaction-line-items');
 const initiatePrivileged = require('./api/initiate-privileged');
 const transitionPrivileged = require('./api/transition-privileged');
 const deleteAccount = require('./api/delete-account');
 const toggleFavorite = require('./api/toggle-favorite');
+const updateCart = require('./api/update-cart');
 
 const createUserWithIdp = require('./api/auth/createUserWithIdp');
 
@@ -54,10 +56,12 @@ router.use((req, res, next) => {
 router.get('/initiate-login-as', initiateLoginAs);
 router.get('/login-as', loginAs);
 router.post('/transaction-line-items', transactionLineItems);
+router.post('/cart-transaction-line-items', cartTransactionLineItems);
 router.post('/initiate-privileged', initiatePrivileged);
 router.post('/transition-privileged', transitionPrivileged);
 router.post('/delete-account', deleteAccount);
 router.post('/toggle-favorite', toggleFavorite);
+router.post('/update-cart', updateCart);
 
 // Create user with identity provider (e.g. Facebook or Google)
 // This endpoint is called to create a new user after user has confirmed
