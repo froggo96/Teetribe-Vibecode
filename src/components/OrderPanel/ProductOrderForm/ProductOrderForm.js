@@ -294,6 +294,7 @@ const renderForm = formRenderProps => {
         <AddToCartButton
           listing={listing}
           currentStock={currentStock}
+          quantity={Number.parseInt(values?.quantity, 10)}
           disabled={variantSelectionIncomplete}
         />
       ) : null}

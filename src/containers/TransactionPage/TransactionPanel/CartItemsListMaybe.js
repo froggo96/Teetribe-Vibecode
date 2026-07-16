@@ -1,11 +1,13 @@
 import React from 'react';
 import { FormattedMessage } from '../../../util/reactIntl';
 
+import { H6 } from '../../../components';
+
 import css from './TransactionPanel.module.css';
 
 /**
  * Lists every item in a cart order (a single-seller checkout covering multiple listings -
- * see src/util/cartHelpers.js) below the transacted (primary) listing's own detail card.
+ * see src/util/cartHelpers.js) below the transacted (main) listing's own detail card.
  * Only rendered when there's more than one cart item - a "buy now" purchase (a cart of
  * one) shows exactly as a regular single-listing purchase always has.
  *
@@ -22,12 +24,13 @@ const CartItemsListMaybe = props => {
 
   return (
     <div className={css.cartItemsList}>
-      <h3 className={css.cartItemsListHeading}>
+      <H6 as="h3" className={css.cartItemsListHeading}>
         <FormattedMessage
           id="TransactionPanel.cartItemsHeading"
           values={{ count: cartItems.length }}
         />
-      </h3>
+      </H6>
+      <hr className={css.totalDivider} />
       <ul className={css.cartItemsListItems}>
         {cartItems.map((item, i) => (
           <li key={`${item.listingId}-${i}`} className={css.cartItemsListItem}>

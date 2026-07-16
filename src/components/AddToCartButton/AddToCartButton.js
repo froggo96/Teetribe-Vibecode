@@ -27,6 +27,8 @@ import css from './AddToCartButton.module.css';
  *   (for products with variants, this must be the resolved variant sibling, not
  *   the primary listing - it's the sibling's id that is stored in the cart).
  * @param {number?} props.currentStock - current stock of the listing; caps the stepper
+ * @param {number?} props.quantity - how many units the first click adds (e.g. the order
+ *   form's selected "Number of items"); the stepper takes over once the item is in the cart
  * @param {boolean?} props.disabled - true while a required selection (e.g. size/color)
  *   is incomplete; renders a disabled button with a hint instead of the normal control
  * @param {string?} props.className add more style rules in addition to component's own css.root
@@ -34,7 +36,7 @@ import css from './AddToCartButton.module.css';
  * @returns {JSX.Element}
  */
 const AddToCartButton = props => {
-  const { listing, currentStock, disabled, className, rootClassName } = props;
+  const { listing, currentStock, quantity = 1, disabled, className, rootClassName } = props;
   const dispatch = useDispatch();
   const history = useHistory();
   const location = useLocation();
@@ -79,6 +81,12 @@ const AddToCartButton = props => {
 
   const isMaxItems = typeof currentStock === 'number' && count >= currentStock;
 
+  // The first click adds the whole selected quantity (clamped to stock); after that the
+  // stepper adjusts one unit at a time.
+  const sanitizedQuantity = Number.isInteger(quantity) && quantity > 0 ? quantity : 1;
+  const initialAddQuantity =
+    typeof currentStock === 'number' ? Math.min(sanitizedQuantity, currentStock) : sanitizedQuantity;
+
   if (count === 0) {
     return (
       <div className={classes}>
@@ -86,7 +94,7 @@ const AddToCartButton = props => {
           className={css.addButton}
           type="button"
           inProgress={inProgress}
-          onClick={() => handleToggle(1)}
+          onClick={() => handleToggle(initialAddQuantity)}
         >
           <IconCart className={css.buttonIcon} />
           <FormattedMessage id="AddToCartButton.addToCart" />

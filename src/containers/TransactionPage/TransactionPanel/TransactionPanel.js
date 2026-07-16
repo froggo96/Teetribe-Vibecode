@@ -176,15 +176,19 @@ export class TransactionPanelComponent extends Component {
     const showDetailCardHeadings = stateData.showDetailCardHeadings || !hasViewingRights;
 
     const deliveryMethod = protectedData?.deliveryMethod || 'none';
+    const cartItems = protectedData?.cartItems;
+    const isMultiItemCartOrder = Array.isArray(cartItems) && cartItems.length > 1;
     // For product variants the transacted listing is one specific size/color combination -
-    // surface it above the order breakdown, reusing the booking price-variant slot.
+    // surface it above the order breakdown, reusing the booking price-variant slot. For a
+    // multi-item cart order this would only describe the main listing while every
+    // breakdown row already carries its own variant in the title, so it's left out.
     const variantLabels = variantDisplayLabels(
       listing?.attributes?.publicData,
       config.listing.listingFields
     );
-    const priceVariantName =
+    const mainListingVariantName =
       protectedData?.priceVariantName || (variantLabels.length ? variantLabels.join(' / ') : null);
-    const cartItems = protectedData?.cartItems;
+    const priceVariantName = isMultiItemCartOrder ? null : mainListingVariantName;
 
     const classes = classNames(rootClassName || css.root, className);
 

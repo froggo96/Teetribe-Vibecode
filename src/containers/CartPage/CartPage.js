@@ -4,6 +4,7 @@ import { connect, useDispatch, useSelector } from 'react-redux';
 import { useHistory } from 'react-router-dom';
 
 import { FormattedMessage, useIntl } from '../../util/reactIntl';
+import { types as sdkTypes } from '../../util/sdkLoader';
 import { useConfiguration } from '../../context/configurationContext';
 import { useRouteConfiguration } from '../../context/routeConfigurationContext';
 import { isScrollingDisabled } from '../../ducks/ui.duck';
@@ -33,6 +34,8 @@ import CartCard from './CartCard';
 import CartDeliveryForm from './CartDeliveryForm';
 
 import css from './CartPage.module.css';
+
+const { UUID } = sdkTypes;
 
 // A listing lacking its own images needs its primary's images grafted on (see
 // util/variantHelpers.js: sibling variant listings never carry images of their own).
@@ -366,7 +369,9 @@ const mapStateToProps = state => {
   const { currentUser } = state.user;
   const { cartListingIds, queryInProgress, queryListingsError, groupLineItems } = state.CartPage;
   const listings = getListingsById(state, cartListingIds);
-  const primaryIds = uniquePrimaryIdsNeedingImages(listings);
+  // getListingsById expects id objects (it looks entities up by id.uuid), while the
+  // publicData back-reference is a plain uuid string - wrap before the lookup.
+  const primaryIds = uniquePrimaryIdsNeedingImages(listings).map(id => new UUID(id));
   const primaryListings = getListingsById(state, primaryIds);
   const primaryListingsById = Object.fromEntries(primaryListings.map(l => [l.id.uuid, l]));
 
