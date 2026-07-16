@@ -409,7 +409,14 @@ export const processCartCheckoutWithPayment = (orderParams, extraPaymentParams) 
   const fnRequestPayment = fnParams => {
     // fnParams should be { listingId, deliveryMethod?, cartItems, paymentMethod?.setupPaymentMethodForSaving?, protectedData }
     const hasPaymentIntents = storedTx.attributes.protectedData?.stripePaymentIntents;
-    const requestTransition = process.transitions.REQUEST_PAYMENT;
+
+    // A buyer who first sent an inquiry about the listing already has a transaction in the
+    // inquiry state - buying then continues that transaction (as a cart of one) instead of
+    // initiating a new one, exactly like processCheckoutWithPayment does.
+    const requestTransition =
+      storedTx?.attributes?.lastTransition === process.transitions.INQUIRE
+        ? process.transitions.REQUEST_PAYMENT_AFTER_INQUIRY
+        : process.transitions.REQUEST_PAYMENT;
     const isPrivileged = process.isPrivileged(requestTransition);
 
     // If paymentIntent exists, order has been initiated previously.
