@@ -171,5 +171,23 @@
 
          Check: /server/csp.js
     -->
+
+    <!--Start of Tawk.to Script-->
+    <!--
+         Loaded as a plain external script instead of Tawk.to's inline snippet:
+         every inline script on this page needs a server-generated CSP nonce
+         (see server/renderer.js), which a static snippet in this file can't
+         get - it would be blocked if REACT_APP_CSP is ever set to "block".
+         The widget itself is identical; the inline wrapper only pre-sets the
+         optional Tawk_API/Tawk_LoadStart globals. Tawk.to domains are
+         whitelisted in server/csp.js.
+    -->
+    <script
+      async
+      src="https://embed.tawk.to/6a59ccc0940f101d5323a237/1jtncfjrv"
+      charset="UTF-8"
+      crossorigin="*"
+    ></script>
+    <!--End of Tawk.to Script-->
   </body>
 </html>

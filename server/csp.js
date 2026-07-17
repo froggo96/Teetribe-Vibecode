@@ -150,9 +150,26 @@ exports.csp = (reportUri, reportOnly) => {
   // const { imgSrc = [self] } = defaultDirectives;
   // const exampleImgSrc = imgSrc.concat('my-custom-domain.example.com');
 
+  // Tawk.to chat widget (loaded from public/index.html): the embed script pulls
+  // further scripts/styles/fonts from *.tawk.to, renders the chat in an iframe,
+  // talks to its backend over XHR + websocket, and plays notification sounds.
+  const {
+    connectSrc = [self],
+    fontSrc = [self],
+    frameSrc = [self],
+    imgSrc = [self],
+    scriptSrc = [self],
+    styleSrc = [self],
+  } = defaultDirectives;
+
   const customDirectives = {
-    // Example: Add custom directive override
-    // imgSrc: exampleImgSrc,
+    connectSrc: connectSrc.concat(['*.tawk.to', 'wss://*.tawk.to']),
+    fontSrc: fontSrc.concat(['*.tawk.to']),
+    frameSrc: frameSrc.concat(['*.tawk.to']),
+    imgSrc: imgSrc.concat(['*.tawk.to', 'tawk.link']),
+    mediaSrc: [self, blob, '*.tawk.to'],
+    scriptSrc: scriptSrc.concat(['*.tawk.to']),
+    styleSrc: styleSrc.concat(['*.tawk.to']),
   };
 
   // ================ END CUSTOM CSP URLs ================ //
