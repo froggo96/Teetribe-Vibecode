@@ -2,9 +2,11 @@ import React from 'react';
 import { useDispatch } from 'react-redux';
 
 import { FormattedMessage, useIntl } from '../../util/reactIntl';
+import { useConfiguration } from '../../context/configurationContext';
 import { formatMoney } from '../../util/currency';
 import { createSlug } from '../../util/urlHelpers';
 import { toggleCart } from '../../ducks/cart.duck';
+import { titleWithVariantSuffix, variantGroupIdOf } from '../../util/variantHelpers';
 
 import {
   AspectRatioWrapper,
@@ -39,6 +41,7 @@ const VARIANT_PREFIX = 'listing-card';
 const CartCard = props => {
   const { authorId, listingId, quantity, listing, images, currentUserId, renderSizes } = props;
   const intl = useIntl();
+  const config = useConfiguration();
   const dispatch = useDispatch();
 
   const handleRemove = () => {
@@ -61,10 +64,15 @@ const CartCard = props => {
     );
   }
 
-  const { title } = listing.attributes;
+  // For a variant group's primary listing (which is itself one combination, e.g.
+  // S / Black) the stored title has no size/color suffix - derive it for display so
+  // every cart row names its exact variant.
+  const title = titleWithVariantSuffix(listing, config.listing.listingFields);
   const price = listing.attributes.price;
   const currentStock = listing.currentStock?.attributes?.quantity;
   const slug = createSlug(title);
+  // Variant siblings are hidden from browsing - link to the primary listing instead.
+  const browsableListingId = variantGroupIdOf(listing) || listingId;
   const isOwnListing = currentUserId && listing.author?.id?.uuid === currentUserId;
   const isOutOfStock = typeof currentStock === 'number' && currentStock === 0;
   const isOverStock = typeof currentStock === 'number' && quantity > currentStock;
@@ -79,7 +87,7 @@ const CartCard = props => {
       <NamedLink
         className={css.thumbnailLink}
         name="ListingPage"
-        params={{ id: listingId, slug }}
+        params={{ id: browsableListingId, slug }}
       >
         <AspectRatioWrapper className={css.aspectRatioWrapper} width={1} height={1}>
           <ResponsiveImage
@@ -93,7 +101,11 @@ const CartCard = props => {
       </NamedLink>
 
       <div className={css.details}>
-        <NamedLink className={css.title} name="ListingPage" params={{ id: listingId, slug }}>
+        <NamedLink
+          className={css.title}
+          name="ListingPage"
+          params={{ id: browsableListingId, slug }}
+        >
           {title}
         </NamedLink>
         {price ? <div className={css.price}>{formatMoney(intl, price)}</div> : null}

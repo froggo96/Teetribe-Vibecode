@@ -132,7 +132,9 @@ const getOrderParams = (
   const existingCartItems = pageData.orderData?.cartItems;
   const cartItems =
     existingCartItems ||
-    (isPurchaseItem && quantity ? [buildCartItemFromListing(pageData.listing, quantity)] : null);
+    (isPurchaseItem && quantity
+      ? [buildCartItemFromListing(pageData.listing, quantity, config.listing.listingFields)]
+      : null);
   const cartItemsMaybe = cartItems ? { cartItems } : {};
   const cartAuthorId = pageData.orderData?.cartAuthorId || pageData?.listing?.author?.id?.uuid;
   const cartAuthorIdMaybe = cartItems && cartAuthorId ? { cartAuthorId } : {};

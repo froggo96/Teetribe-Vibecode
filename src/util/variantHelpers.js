@@ -115,3 +115,24 @@ export const isPrimaryVariantListing = listing =>
   listing?.attributes?.publicData?.[IS_PRIMARY_VARIANT_KEY] === true;
 
 export const variantGroupIdOf = listing => listing?.attributes?.publicData?.[VARIANT_GROUP_ID_KEY];
+
+/**
+ * The listing's title including its variant, e.g. "Plain t-shirts (S / Black)".
+ *
+ * Sibling listings already carry the suffix in their stored title. The primary listing is
+ * itself one concrete combination (e.g. S / Black) but its stored title has NO suffix (it's
+ * the search-visible product title) - so for primaries the suffix is derived on the fly
+ * from publicData. Listings without variant attributes return their title unchanged.
+ *
+ * @param {Object} listing
+ * @param {Array} listingFields the marketplace's listing fields config, for option labels
+ * @returns {string}
+ */
+export const titleWithVariantSuffix = (listing, listingFields) => {
+  const title = listing?.attributes?.title || '';
+  if (!isPrimaryVariantListing(listing)) {
+    return title;
+  }
+  const labels = variantDisplayLabels(listing?.attributes?.publicData, listingFields);
+  return `${title}${variantTitleSuffix(labels)}`;
+};

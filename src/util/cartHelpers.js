@@ -1,4 +1,4 @@
-import { variantGroupIdOf } from './variantHelpers';
+import { variantGroupIdOf, titleWithVariantSuffix } from './variantHelpers';
 
 /**
  * Build a cart-item entry (the shape stored in a transaction's protectedData.cartItems, and
@@ -11,14 +11,17 @@ import { variantGroupIdOf } from './variantHelpers';
  *
  * @param {Object} listing
  * @param {number} quantity
+ * @param {Array} listingFields the marketplace's listing fields config - used to include
+ *   the variant (e.g. "(S / Black)") in the stored title when the transacted listing is a
+ *   variant group's primary, whose own title carries no suffix
  * @returns {{listingId: string, quantity: number, title: string, unitPriceAmount: number, currency: string, imageListingId: string}}
  */
-export const buildCartItemFromListing = (listing, quantity) => {
+export const buildCartItemFromListing = (listing, quantity, listingFields) => {
   const price = listing?.attributes?.price;
   return {
     listingId: listing?.id?.uuid,
     quantity,
-    title: listing?.attributes?.title,
+    title: titleWithVariantSuffix(listing, listingFields),
     unitPriceAmount: price?.amount,
     currency: price?.currency,
     // Siblings carry no images of their own - imageListingId points to the primary

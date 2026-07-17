@@ -83,6 +83,7 @@ const CartSellerGroup = props => {
     primaryListingsById,
     renderSizes,
     listingTypes,
+    listingFields,
     marketplaceCurrency,
     marketplaceName,
   } = props;
@@ -138,7 +139,7 @@ const CartSellerGroup = props => {
     }
     const mainListing = availableItems[0].listing;
     const cartItemsForOrder = availableItems.map(({ listing, quantity }) =>
-      buildCartItemFromListing(listing, quantity)
+      buildCartItemFromListing(listing, quantity, listingFields)
     );
     const initialValues = {
       listing: mainListing,
@@ -275,6 +276,7 @@ export const CartPageComponent = props => {
   const listingsById = new Map(listings.map(l => [l.id.uuid, l]));
   const currentUserId = currentUser?.id?.uuid;
   const listingTypes = config.listing.listingTypes || [];
+  const listingFields = config.listing.listingFields || [];
   const marketplaceCurrency = config.currency;
   const marketplaceName = config.marketplaceName;
 
@@ -342,6 +344,7 @@ export const CartPageComponent = props => {
               primaryListingsById={primaryListingsById}
               renderSizes={renderSizes}
               listingTypes={listingTypes}
+              listingFields={listingFields}
               marketplaceCurrency={marketplaceCurrency}
               marketplaceName={marketplaceName}
             />
