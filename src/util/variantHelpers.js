@@ -117,6 +117,29 @@ export const isPrimaryVariantListing = listing =>
 export const variantGroupIdOf = listing => listing?.attributes?.publicData?.[VARIANT_GROUP_ID_KEY];
 
 /**
+ * The listing's images, reordered so its own variant photo comes first.
+ *
+ * Only relevant for a variant group's primary listing: its color photo lives somewhere in
+ * its own gallery, tracked by publicData.variantImageId - so images[0] is the product's
+ * main gallery shot, not the transacted variant. Reordering makes surfaces that show a
+ * single image (checkout, cart row, order page) show the variant photo. Siblings keep
+ * their images as-is (their own color photo is already images[0]), as do non-variant
+ * listings, and a dangling variantImageId (photo removed on the Photos tab) is ignored.
+ *
+ * @param {Object} listing denormalised listing entity (images included)
+ * @returns {Array} images
+ */
+export const imagesWithVariantPhotoFirst = listing => {
+  const images = listing?.images || [];
+  const variantImageId = listing?.attributes?.publicData?.[PRIMARY_VARIANT_IMAGE_KEY];
+  if (!variantImageId) {
+    return images;
+  }
+  const index = images.findIndex(img => img?.id?.uuid === variantImageId);
+  return index > 0 ? [images[index], ...images.filter((_, i) => i !== index)] : images;
+};
+
+/**
  * The listing's title including its variant, e.g. "Plain t-shirts (S / Black)".
  *
  * Sibling listings already carry the suffix in their stored title. The primary listing is

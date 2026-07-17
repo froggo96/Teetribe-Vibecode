@@ -6,7 +6,11 @@ import { propTypes } from '../../../util/types';
 import { userDisplayNameAsString } from '../../../util/data';
 import { createSlug } from '../../../util/urlHelpers';
 import { displayPrice } from '../../../util/configHelpers';
-import { variantDisplayLabels, variantGroupIdOf } from '../../../util/variantHelpers';
+import {
+  variantDisplayLabels,
+  variantGroupIdOf,
+  imagesWithVariantPhotoFirst,
+} from '../../../util/variantHelpers';
 
 import { AvatarLarge, NamedLink, UserDisplayName } from '../../../components';
 
@@ -162,7 +166,10 @@ export class TransactionPanelComponent extends Component {
     });
 
     const listingTitle = listingDeleted ? deletedListingTitle : listing?.attributes?.title;
-    const firstImage = listing?.images?.length > 0 ? listing?.images[0] : null;
+    // When the transacted listing is a variant group's primary, its own color photo
+    // (not the main gallery shot) should represent the order.
+    const orderedImages = imagesWithVariantPhotoFirst(listing);
+    const firstImage = orderedImages.length > 0 ? orderedImages[0] : null;
 
     // For products with variants the transacted listing is a hidden sibling (one
     // size/color combination) that isn't meant to be browsed directly - every link on

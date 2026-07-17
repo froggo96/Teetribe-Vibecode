@@ -10,7 +10,10 @@ import { OFFER, REQUEST } from '../../transactions/transaction';
 
 // Global ducks (for Redux actions and thunks)
 import { getMarketplaceEntities } from '../../ducks/marketplaceData.duck';
-import { PRIMARY_VARIANT_IMAGE_KEY } from '../../util/variantHelpers';
+import {
+  PRIMARY_VARIANT_IMAGE_KEY,
+  imagesWithVariantPhotoFirst,
+} from '../../util/variantHelpers';
 import { manageDisableScrolling, isScrollingDisabled } from '../../ducks/ui.duck';
 import { initializeCardPaymentData } from '../../ducks/stripe.duck.js';
 
@@ -278,13 +281,17 @@ export const ListingPageComponent = props => {
         : commonParams;
       // Sibling listings carry no images of their own (an image can only be attached to one
       // listing), so graft the primary's images onto the resolved variant for the checkout
-      // page's listing thumbnail.
+      // page's listing thumbnail. When the resolved variant is the primary itself, its own
+      // color photo (tracked by publicData.variantImageId) is moved first so checkout shows
+      // the selected variant instead of the main gallery shot.
       const getListingWithVariantImages = listingId => {
         const found = getListing(listingId);
         const isResolvedVariant = found?.id?.uuid === resolvedVariantListing?.id?.uuid;
-        return isResolvedVariant && !found.images?.length
-          ? { ...found, images: currentListing.images }
-          : found;
+        return !isResolvedVariant
+          ? found
+          : found.images?.length
+          ? { ...found, images: imagesWithVariantPhotoFirst(found) }
+          : { ...found, images: currentListing.images };
       };
       const onSubmit = handleSubmit({
         ...submitParams,

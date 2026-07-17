@@ -43,7 +43,10 @@ const imageVariantParams = listingImageConfig => {
     'fields.image': [`variants.${variantPrefix}`, `variants.${variantPrefix}-2x`],
     ...createImageVariantConfig(`${variantPrefix}`, 400, aspectRatio),
     ...createImageVariantConfig(`${variantPrefix}-2x`, 800, aspectRatio),
-    'limit.images': 1,
+    // No 'limit.images' here (unlike e.g. FavoriteListingsPage): a variant group's
+    // primary listing tracks its own color photo deeper in its gallery
+    // (publicData.variantImageId), and the cart shows THAT image, not the first one -
+    // so the whole gallery relationship is needed (see imagesWithVariantPhotoFirst).
   };
 };
 

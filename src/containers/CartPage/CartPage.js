@@ -16,7 +16,11 @@ import {
   setCartDeliveryMethod,
 } from '../../ducks/cart.duck';
 import { fetchCartGroupLineItems } from './CartPage.duck';
-import { variantGroupIdOf, VARIANT_GROUP_ID_KEY } from '../../util/variantHelpers';
+import {
+  variantGroupIdOf,
+  imagesWithVariantPhotoFirst,
+  VARIANT_GROUP_ID_KEY,
+} from '../../util/variantHelpers';
 import { buildCartItemFromListing } from '../../util/cartHelpers';
 import { displayDeliveryPickup, displayDeliveryShipping } from '../../util/configHelpers';
 import { userDisplayNameAsString } from '../../util/data';
@@ -39,12 +43,14 @@ const { UUID } = sdkTypes;
 
 // A listing lacking its own images needs its primary's images grafted on (see
 // util/variantHelpers.js: sibling variant listings never carry images of their own).
+// A primary listing's own variant photo is moved first, so the row shows the exact
+// combination in the cart instead of the product's main gallery shot.
 const imagesForListing = (listing, primaryListingsById) => {
   if (!listing) {
     return null;
   }
   if (listing.images?.length > 0) {
-    return listing.images;
+    return imagesWithVariantPhotoFirst(listing);
   }
   const primaryId = variantGroupIdOf(listing);
   return primaryListingsById[primaryId]?.images || [];
@@ -141,8 +147,12 @@ const CartSellerGroup = props => {
     const cartItemsForOrder = availableItems.map(({ listing, quantity }) =>
       buildCartItemFromListing(listing, quantity, listingFields)
     );
+    // The checkout page shows a single image for the whole order - hand it the same
+    // per-variant image this cart row shows (own variant photo first, or the primary's
+    // gallery grafted onto an imageless sibling).
+    const mainListingImages = imagesForListing(mainListing, primaryListingsById) || [];
     const initialValues = {
-      listing: mainListing,
+      listing: { ...mainListing, images: mainListingImages },
       orderData: {
         quantity: availableItems[0].quantity,
         deliveryMethod,
