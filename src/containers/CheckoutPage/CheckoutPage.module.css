@@ -330,8 +330,15 @@
 }
 
 .cartItemThumb {
+  display: block;
   flex: 0 0 auto;
   width: 104px;
+  color: inherit;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: none;
+  }
 }
 
 .cartItemThumbImage {

@@ -9,7 +9,8 @@ import { variantGroupIdOf, titleWithVariantSuffix } from './variantHelpers';
  * ListingPageCarousel.js/CartPage.duck.js), so its id, title, and price are exactly the
  * ones that get transacted.
  *
- * @param {Object} listing
+ * @param {Object} listing - must include its `images` relationship (denormalised), so
+ *   imageListingId can tell whether this listing has its own photo
  * @param {number} quantity
  * @param {Array} listingFields the marketplace's listing fields config - used to include
  *   the variant (e.g. "(S / Black)") in the stored title when the transacted listing is a
@@ -24,9 +25,12 @@ export const buildCartItemFromListing = (listing, quantity, listingFields) => {
     title: titleWithVariantSuffix(listing, listingFields),
     unitPriceAmount: price?.amount,
     currency: price?.currency,
-    // Siblings carry no images of their own - imageListingId points to the primary
-    // listing whose gallery should be shown instead. Falls back to the listing's own id
-    // for non-variant products.
-    imageListingId: variantGroupIdOf(listing) || listing?.id?.uuid,
+    // imageListingId is "whichever listing's gallery has the photo to show": the
+    // transacted listing's own id if it has at least one image of its own (a sibling can
+    // have its own per-color photo - see util/variantHelpers.js), otherwise the primary
+    // listing's id as a fallback (also falls back to its own id for non-variant products,
+    // where variantGroupIdOf is undefined).
+    imageListingId:
+      listing?.images?.length > 0 ? listing?.id?.uuid : variantGroupIdOf(listing) || listing?.id?.uuid,
   };
 };

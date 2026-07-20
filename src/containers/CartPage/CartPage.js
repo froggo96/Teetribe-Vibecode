@@ -147,14 +147,6 @@ const CartSellerGroup = props => {
     const cartItemsForOrder = availableItems.map(({ listing, quantity }) =>
       buildCartItemFromListing(listing, quantity, listingFields)
     );
-    // Per-item thumbnail images (own variant photo first, or the primary's gallery
-    // grafted onto an imageless sibling), aligned to cartItems by index. Passed through
-    // orderData for display only - kept out of the server order params and the persisted
-    // transaction protectedData (see getOrderParams in CheckoutPageWithPayment). Survives
-    // a checkout-page refresh via the session store's SDK-type-aware serializer.
-    const cartItemImages = availableItems.map(
-      ({ listing }) => (imagesForListing(listing, primaryListingsById) || [])[0] || null
-    );
     // The checkout page shows the main listing's own image at the top - hand it the same
     // per-variant image this cart row shows.
     const mainListingImages = imagesForListing(mainListing, primaryListingsById) || [];
@@ -164,7 +156,6 @@ const CartSellerGroup = props => {
         quantity: availableItems[0].quantity,
         deliveryMethod,
         cartItems: cartItemsForOrder,
-        cartItemImages,
         fromCart: true,
         cartAuthorId: authorId,
       },

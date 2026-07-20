@@ -4,9 +4,10 @@ import { pick } from '../../util/common';
 import { initiatePrivileged, transitionPrivileged } from '../../util/api';
 import { denormalisedResponseEntities } from '../../util/data';
 import { storableError } from '../../util/errors';
-import { types as sdkTypes } from '../../util/sdkLoader';
+import { types as sdkTypes, createImageVariantConfig } from '../../util/sdkLoader';
 import * as log from '../../util/log';
 import { setCurrentUserHasOrders, fetchCurrentUser } from '../../ducks/user.duck';
+import { addMarketplaceEntities } from '../../ducks/marketplaceData.duck';
 import { CART_STOCK_PROCESS_NAME } from '../../transactions/transaction';
 import { transitions as cartStockTransitions } from '../../transactions/transactionProcessCartStock';
 
@@ -524,6 +525,55 @@ export const confirmStockReservationTransactionsThunk = createAsyncThunk(
 );
 export const confirmStockReservationTransactions = childTransactions => dispatch => {
   return dispatch(confirmStockReservationTransactionsThunk({ childTransactions })).unwrap();
+};
+
+////////////////////////////
+// Fetch Cart Item Images //
+////////////////////////////
+// The cart checkout side card shows one thumbnail per item (see CartDetailsSideCard.js).
+// Fetched directly here - rather than trusting data threaded through orderData from
+// wherever the buyer came from - so it works the same way regardless of navigation path
+// (cart checkout, "buy now", a reopened/refreshed checkout tab, or a stale cart-page tab
+// that predates a future change to what it sends).
+const cartItemImageVariantParams = listingImageConfig => {
+  const { aspectWidth = 1, aspectHeight = 1, variantPrefix = 'listing-card' } =
+    listingImageConfig || {};
+  const aspectRatio = aspectHeight / aspectWidth;
+  return {
+    'fields.image': [`variants.${variantPrefix}`, `variants.${variantPrefix}-2x`],
+    ...createImageVariantConfig(`${variantPrefix}`, 400, aspectRatio),
+    ...createImageVariantConfig(`${variantPrefix}-2x`, 800, aspectRatio),
+  };
+};
+
+const fetchCartItemImagesPayloadCreator = (
+  { imageListingIds, listingImageConfig },
+  { extra: sdk, dispatch, rejectWithValue }
+) => {
+  if (!imageListingIds || imageListingIds.length === 0) {
+    return Promise.resolve();
+  }
+  return sdk.listings
+    .query({
+      ids: imageListingIds.map(id => new UUID(id)),
+      include: ['images'],
+      ...cartItemImageVariantParams(listingImageConfig),
+    })
+    .then(response => {
+      dispatch(addMarketplaceEntities(response));
+    })
+    .catch(e => {
+      log.error(e, 'fetch-cart-item-images-failed', { imageListingIds });
+      return rejectWithValue(storableError(e));
+    });
+};
+
+export const fetchCartItemImagesThunk = createAsyncThunk(
+  'CheckoutPage/fetchCartItemImages',
+  fetchCartItemImagesPayloadCreator
+);
+export const fetchCartItemImages = (imageListingIds, listingImageConfig) => dispatch => {
+  return dispatch(fetchCartItemImagesThunk({ imageListingIds, listingImageConfig }));
 };
 
 // ================ Slice ================ //

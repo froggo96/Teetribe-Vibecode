@@ -2,8 +2,9 @@ import React from 'react';
 import classNames from 'classnames';
 
 import { FormattedMessage } from '../../util/reactIntl';
+import { createSlug } from '../../util/urlHelpers';
 
-import { AspectRatioWrapper, AvatarMedium, H4, H6, ResponsiveImage } from '../../components';
+import { AspectRatioWrapper, AvatarMedium, H4, H6, NamedLink, ResponsiveImage } from '../../components';
 
 import css from './CheckoutPage.module.css';
 
@@ -68,8 +69,14 @@ const CartDetailsSideCard = props => {
         <div className={css.cartItemsStrip}>
           {cartItems.map((item, i) => {
             const image = cartItemImages[i] || null;
+            const browsableListingId = item.imageListingId || item.listingId;
             return (
-              <div key={`${item.listingId}-${i}`} className={css.cartItemThumb}>
+              <NamedLink
+                key={`${item.listingId}-${i}`}
+                className={css.cartItemThumb}
+                name="ListingPage"
+                params={{ id: browsableListingId, slug: createSlug(item.title || '') }}
+              >
                 <AspectRatioWrapper
                   className={css.cartItemThumbImage}
                   width={aspectWidth}
@@ -91,7 +98,7 @@ const CartDetailsSideCard = props => {
                     values={{ quantity: item.quantity }}
                   />
                 </p>
-              </div>
+              </NamedLink>
             );
           })}
         </div>

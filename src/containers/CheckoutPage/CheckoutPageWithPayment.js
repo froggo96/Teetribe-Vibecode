@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 
 // Import contexts and util modules
 import { FormattedMessage, intlShape } from '../../util/reactIntl';
@@ -11,8 +12,10 @@ import { propTypes } from '../../util/types';
 import { ensureTransaction } from '../../util/data';
 import { createSlug } from '../../util/urlHelpers';
 import { isTransactionInitiateListingNotFoundError } from '../../util/errors';
-import { variantDisplayLabels } from '../../util/variantHelpers';
+import { variantDisplayLabels, imagesWithVariantPhotoFirst } from '../../util/variantHelpers';
 import { buildCartItemFromListing } from '../../util/cartHelpers';
+import { getListingsById } from '../../ducks/marketplaceData.duck';
+import { types as sdkTypes } from '../../util/sdkLoader';
 import {
   getProcess,
   isBookingProcessAlias,
@@ -39,6 +42,7 @@ import {
   setOrderPageInitialValues,
 } from './CheckoutPageTransactionHelpers.js';
 import { getErrorMessages } from './ErrorMessages';
+import { fetchCartItemImages } from './CheckoutPage.duck';
 
 import StripePaymentForm from './StripePaymentForm/StripePaymentForm';
 import DetailsSideCard from './DetailsSideCard';
@@ -506,8 +510,38 @@ export const CheckoutPageWithPayment = props => {
   // the transaction's protectedData. A "buy now" purchase is a cart of one and is displayed
   // the same way a regular single-listing purchase always has been.
   const cartItems = orderData?.cartItems;
-  const cartItemImages = orderData?.cartItemImages;
   const isCartOrder = cartItems?.length > 1;
+
+  // Fetched directly here (rather than trusting orderData.cartItemImages threaded in from
+  // wherever the buyer came from) so it works the same regardless of navigation path - cart
+  // checkout, "buy now", a reopened/refreshed checkout tab, or a stale cart-page tab that
+  // predates a future change to what it sends.
+  const dispatch = useDispatch();
+  const imageListingIds = isCartOrder
+    ? Array.from(
+        new Set(cartItems.map(ci => ci?.imageListingId || ci?.listingId).filter(Boolean))
+      )
+    : [];
+  const imageListingIdsKey = imageListingIds.join(',');
+  useEffect(() => {
+    if (imageListingIds.length > 0) {
+      dispatch(fetchCartItemImages(imageListingIds, config.layout.listingImage));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageListingIdsKey]);
+  const cartItemImageListings = useSelector(state =>
+    imageListingIds.length > 0
+      ? getListingsById(state, imageListingIds.map(id => new sdkTypes.UUID(id)))
+      : []
+  );
+  const cartItemImages = isCartOrder
+    ? cartItems.map(ci => {
+        const targetId = ci?.imageListingId || ci?.listingId;
+        const found = cartItemImageListings.find(l => l.id?.uuid === targetId);
+        const orderedImages = found ? imagesWithVariantPhotoFirst(found) : null;
+        return orderedImages?.length > 0 ? orderedImages[0] : null;
+      })
+    : null;
 
   // If existing transaction has line-items, it has gone through one of the request-payment transitions.
   // Otherwise, we try to rely on speculatedTransaction for order breakdown data.
