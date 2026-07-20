@@ -314,6 +314,51 @@
   color: var(--colorGrey700);
 }
 
+/* Horizontal, scrollable strip of item thumbnails on the checkout detail card. */
+.cartItemsStrip {
+  display: none;
+
+  @media (--viewportLarge) {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding: 16px 24px 8px 24px;
+
+    /* Thin, unobtrusive scrollbar */
+    scrollbar-width: thin;
+  }
+}
+
+.cartItemThumb {
+  flex: 0 0 auto;
+  width: 104px;
+}
+
+.cartItemThumbImage {
+  border: 1px solid var(--colorGrey100);
+  border-radius: var(--borderRadiusMedium);
+  overflow: hidden;
+  background-color: var(--colorGrey50);
+}
+
+.cartItemThumbTitle {
+  composes: marketplaceTinyFontStyles from global;
+  margin: 6px 0 0 0;
+  color: var(--colorGrey700);
+
+  /* Two-line clamp so long variant titles don't blow out the thumbnail width */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.cartItemThumbQty {
+  composes: marketplaceTinyFontStyles from global;
+  margin: 2px 0 0 0;
+  color: var(--colorGrey300);
+}
+
 .detailsSubtitle {
   composes: h5 from global;
 

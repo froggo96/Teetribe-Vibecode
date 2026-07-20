@@ -506,6 +506,7 @@ export const CheckoutPageWithPayment = props => {
   // the transaction's protectedData. A "buy now" purchase is a cart of one and is displayed
   // the same way a regular single-listing purchase always has been.
   const cartItems = orderData?.cartItems;
+  const cartItemImages = orderData?.cartItemImages;
   const isCartOrder = cartItems?.length > 1;
 
   // If existing transaction has line-items, it has gone through one of the request-payment transitions.
@@ -745,8 +746,8 @@ export const CheckoutPageWithPayment = props => {
         {isCartOrder ? (
           <CartDetailsSideCard
             cartItems={cartItems}
+            cartItemImages={cartItemImages}
             author={listing?.author}
-            firstImage={firstImage}
             layoutListingImageConfig={config.layout.listingImage}
             speculateTransactionErrorMessage={errorMessages.speculateTransactionErrorMessage}
             processName={processName}
