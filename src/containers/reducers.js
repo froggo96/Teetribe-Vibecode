@@ -3,6 +3,7 @@
  * We are following Ducks module proposition:
  * https://github.com/erikras/ducks-modular-redux
  */
+import BulkImportListingsPage from './BulkImportListingsPage/BulkImportListingsPage.duck';
 import CartPage from './CartPage/CartPage.duck';
 import CheckoutPage from './CheckoutPage/CheckoutPage.duck';
 import ContactDetailsPage from './ContactDetailsPage/ContactDetailsPage.duck';
@@ -25,6 +26,7 @@ import StripePayoutPage from './StripePayoutPage/StripePayoutPage.duck';
 import TransactionPage from './TransactionPage/TransactionPage.duck';
 
 export {
+  BulkImportListingsPage,
   CartPage,
   CheckoutPage,
   ContactDetailsPage,

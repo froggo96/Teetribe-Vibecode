@@ -13,6 +13,7 @@ import { NamedRedirect } from '../components';
 const pageDataLoadingAPI = getPageDataLoadingAPI();
 
 const AuthenticationPage = loadable(() => import(/* webpackChunkName: "AuthenticationPage" */ '../containers/AuthenticationPage/AuthenticationPage'));
+const BulkImportListingsPage = loadable(() => import(/* webpackChunkName: "BulkImportListingsPage" */ '../containers/BulkImportListingsPage/BulkImportListingsPage'));
 const CheckoutPage = loadable(() => import(/* webpackChunkName: "CheckoutPage" */ '../containers/CheckoutPage/CheckoutPage'));
 const CMSPage = loadable(() => import(/* webpackChunkName: "CMSPage" */ '../containers/CMSPage/CMSPage'));
 const CartPage = loadable(() => import(/* webpackChunkName: "CartPage" */ '../containers/CartPage/CartPage'));
@@ -325,6 +326,13 @@ const routeConfiguration = (layoutConfig, accessControlConfig) => {
       authPage: 'LoginPage',
       component: ManageListingsPage,
       loadData: pageDataLoadingAPI.ManageListingsPage.loadData,
+    },
+    {
+      path: '/listings/import',
+      name: 'BulkImportListingsPage',
+      auth: true,
+      authPage: 'LoginPage',
+      component: BulkImportListingsPage,
     },
     {
       path: '/favorites',

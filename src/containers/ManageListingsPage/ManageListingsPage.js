@@ -63,6 +63,17 @@ const Heading = props => {
   ) : null;
 };
 
+const BulkImportLinkMaybe = props => {
+  const { currentUser } = props;
+  return hasPermissionToPostListings(currentUser) ? (
+    <p className={css.bulkImportLinkWrapper}>
+      <NamedLink className={css.bulkImportLink} name="BulkImportListingsPage">
+        <FormattedMessage id="ManageListingsPage.bulkImportLink" />
+      </NamedLink>
+    </p>
+  ) : null;
+};
+
 const PaginationLinksMaybe = props => {
   const { listingsAreLoaded, pagination, page } = props;
   return listingsAreLoaded && pagination && pagination.totalPages > 1 ? (
@@ -223,6 +234,7 @@ export const ManageListingsPageComponent = props => {
 
         <div className={css.listingPanel}>
           <Heading listingsAreLoaded={listingsAreLoaded} pagination={pagination} />
+          <BulkImportLinkMaybe currentUser={currentUser} />
 
           <ul className={css.listingCards}>
             {listings.map(l => (

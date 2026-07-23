@@ -17,22 +17,19 @@ import * as log from '../../util/log';
 import { parse } from '../../util/urlHelpers';
 import { isUserAuthorized } from '../../util/userHelpers';
 import { isBookingProcessAlias } from '../../transactions/transaction';
-import { LISTING_STATE_DRAFT, LISTING_STATE_CLOSED } from '../../util/types';
 // Matches EditListingWizard/EditListingWizardTab.js's PRICING_AND_STOCK tab id. Duplicated as a
 // local literal (rather than imported) deliberately - a duck/redux module importing from a UI
 // component file created a circular import that crashed the production server bundle with a
 // "Cannot access before initialization" error.
 const PRICING_AND_STOCK_TAB = 'pricing-and-stock';
 import {
-  VARIANT_ATTRIBUTE_CONFIG_KEY,
   VARIANT_GROUP_ID_KEY,
   IS_PRIMARY_VARIANT_KEY,
   SIBLING_LISTING_IDS_KEY,
-  PRIMARY_VARIANT_IMAGE_KEY,
-  MANAGED_VARIANT_KEYS,
   variantDisplayLabels,
   variantTitleSuffix,
 } from '../../util/variantHelpers';
+import { createOrUpdateVariantGroup, publishVariantGroupCascade } from '../../util/variantImport';
 
 import { addMarketplaceEntities, getMarketplaceEntities } from '../../ducks/marketplaceData.duck';
 import {
@@ -269,16 +266,6 @@ export const requestCreateListingDraft = (data, config) => (dispatch, getState, 
 // Variant siblings (product variants) //
 /////////////////////////////////////
 
-// Every non-variant public data key, i.e. everything that must be identical across all sibling
-// listings of the same product (category, delivery method, other custom listing fields, etc).
-// MANAGED_VARIANT_KEYS is the single source of truth for what must NOT be copied across the
-// group (per-combination attributes and primary-only bookkeeping like variantImageId).
-const sharedPublicDataOf = publicData => {
-  return Object.fromEntries(
-    Object.entries(publicData || {}).filter(([key]) => !MANAGED_VARIANT_KEYS.includes(key))
-  );
-};
-
 // After a successful update of a variant-group's primary listing (any tab other than the
 // variants tab itself, e.g. details/delivery), replay the same update onto every sibling
 // listing so shared fields (title, description, category, ...) never drift apart.
@@ -326,201 +313,25 @@ const propagateToVariantSiblings = (sdk, dispatch, ownListingUpdateValues, respo
 // a real listing so it gets native, atomic stock reservation for free). Combinations that were
 // removed by the seller are closed (not deleted) by the caller before this runs.
 // Note: sibling listings never get images (409 conflict, see propagateToVariantSiblings).
+// The actual create/update/stock/publish/orphan-sweep sequence lives in variantImport.js, shared
+// with the bulk CSV importer - this is just the Redux-aware wrapper (getState for the primary
+// entity, dispatch for mirroring responses into the store).
 const updateVariantCombinations = (
   { id, ownListingUpdateValues, variantCombinations, queryParams },
   sdk,
   dispatch,
   getState
 ) => {
-  const { id: _unusedId, images: _images, price, ...sharedRest } = ownListingUpdateValues;
-  const primaryEntity = getState().marketplaceData.entities.ownListing[id.uuid];
-  const sharedPublicData = sharedPublicDataOf(primaryEntity?.attributes?.publicData);
-  const isPrimaryPublished = primaryEntity?.attributes?.state !== LISTING_STATE_DRAFT;
-
-  const primaryCombo = variantCombinations.find(c => c.isPrimary);
-  const otherCombos = variantCombinations.filter(c => !c.isPrimary);
-
-  const publicDataFor = combo => ({
-    ...sharedPublicData,
-    [VARIANT_GROUP_ID_KEY]: id.uuid,
-    [IS_PRIMARY_VARIANT_KEY]: !!combo.isPrimary,
-    [VARIANT_ATTRIBUTE_CONFIG_KEY.size]: combo.size,
-    [VARIANT_ATTRIBUTE_CONFIG_KEY.color]: combo.color,
+  const primaryListingEntity = getState().marketplaceData.entities.ownListing[id.uuid];
+  return createOrUpdateVariantGroup({
+    sdk,
+    id,
+    primaryListingEntity,
+    ownListingUpdateValues,
+    variantCombinations,
+    queryParams,
+    onEntities: response => dispatch(addMarketplaceEntities(response)),
   });
-
-  // The primary's own color can have a variant photo too, but an image can't live detached
-  // from its listing - so the photo is appended to the primary's gallery images and its id is
-  // tracked in publicData.variantImageId. Replacing swaps out the previously tracked image.
-  const updatePrimary = (primaryCombo?.newColorImageFile
-    ? sdk.images.upload({ image: primaryCombo.newColorImageFile }).then(r => r.data.data.id)
-    : Promise.resolve(null)
-  )
-    .then(newImageId => {
-      const oldVariantImageId = primaryEntity?.attributes?.publicData?.[PRIMARY_VARIANT_IMAGE_KEY];
-      const currentImageIds = (primaryEntity?.relationships?.images?.data || []).map(
-        ref => ref.id
-      );
-      const imagesMaybe = newImageId
-        ? { images: [...currentImageIds.filter(iid => iid.uuid !== oldVariantImageId), newImageId] }
-        : {};
-      const variantImageIdMaybe = newImageId
-        ? { [PRIMARY_VARIANT_IMAGE_KEY]: newImageId.uuid }
-        : {};
-      return sdk.ownListings.update(
-        {
-          id,
-          price,
-          ...sharedRest,
-          ...imagesMaybe,
-          publicData: { ...publicDataFor(primaryCombo), ...variantImageIdMaybe },
-        },
-        queryParams
-      );
-    })
-    .then(response => {
-      dispatch(addMarketplaceEntities(response));
-      return updateStockOfListingMaybe(id, primaryCombo.stockUpdate, dispatch).then(
-        () => response
-      );
-    });
-
-  // Sibling titles carry the variant, e.g. "Plain t-shirts (M / White)" - it's the transacted
-  // listing's title, so this is what surfaces the purchased variant on order pages, checkout,
-  // inbox and notification emails.
-  const siblingTitleFor = combo => {
-    const labels = [combo.sizeLabel || combo.size, combo.colorLabel || combo.color].filter(
-      Boolean
-    );
-    return `${primaryEntity?.attributes?.title}${variantTitleSuffix(labels)}`;
-  };
-
-  // A newly picked per-color photo is uploaded once per sibling of that color: an image
-  // resource can only be attached to one listing, so each sibling needs its own copy.
-  const uploadColorImageMaybe = combo =>
-    combo.newColorImageFile
-      ? sdk.images
-          .upload({ image: combo.newColorImageFile })
-          .then(r => ({ images: [r.data.data.id] }))
-      : Promise.resolve({});
-
-  // Resolves to the sibling's listing id once it's fully up to date. Existing siblings that
-  // are somehow still drafts while the primary is published (e.g. an earlier partially-failed
-  // save) are published here too, so the whole group self-heals on the next save.
-  const createOrUpdateSibling = combo => {
-    if (combo.existingListingId) {
-      const siblingId = combo.existingListingId;
-      return uploadColorImageMaybe(combo)
-        .then(imagesMaybe =>
-          sdk.ownListings.update(
-            { id: siblingId, title: siblingTitleFor(combo), price, ...sharedRest, ...imagesMaybe },
-            queryParams
-          )
-        )
-        .then(response => {
-          // Keep the store's sibling entity fresh (incl. its image), so the variants panel
-          // still shows the per-color photo right after saving.
-          dispatch(addMarketplaceEntities(response));
-          const siblingState = response?.data?.data?.attributes?.state;
-          // A combination the seller currently wants (it's still checked, hence being saved
-          // here) should always end up in the same state as the primary - self-heals siblings
-          // left in draft or wrongly closed by an earlier partially-failed save.
-          if (isPrimaryPublished && siblingState === LISTING_STATE_DRAFT) {
-            return sdk.ownListings.publishDraft({ id: siblingId }, { expand: true });
-          }
-          if (isPrimaryPublished && siblingState === LISTING_STATE_CLOSED) {
-            return sdk.ownListings.open({ id: siblingId }, { expand: true });
-          }
-          return Promise.resolve();
-        })
-        .then(() => updateStockOfListingMaybe(siblingId, combo.stockUpdate, dispatch))
-        .then(() => siblingId)
-        .catch(e => {
-          log.error(e, 'update-variant-sibling-failed', { siblingId });
-          throw e;
-        });
-    }
-
-    return uploadColorImageMaybe(combo)
-      .then(imagesMaybe =>
-        sdk.ownListings.createDraft(
-          {
-            title: siblingTitleFor(combo),
-            price,
-            ...sharedRest,
-            ...imagesMaybe,
-            publicData: publicDataFor(combo),
-          },
-          { expand: true, ...queryParams }
-        )
-      )
-      .then(response => {
-        dispatch(addMarketplaceEntities(response));
-        const siblingId = response.data.data.id;
-        return updateStockOfListingMaybe(siblingId, combo.stockUpdate, dispatch)
-          .then(() =>
-            isPrimaryPublished
-              ? sdk.ownListings.publishDraft({ id: siblingId }, { expand: true })
-              : Promise.resolve()
-          )
-          .then(() => siblingId);
-      })
-      .catch(e => {
-        log.error(e, 'create-variant-sibling-failed', { combo });
-        throw e;
-      });
-  };
-
-  // Sequential on purpose - see propagateToVariantSiblings for why.
-  const processSiblingsSequentially = combos =>
-    combos.reduce(
-      (chain, combo) =>
-        chain.then(siblingIds =>
-          createOrUpdateSibling(combo).then(siblingId => [...siblingIds, siblingId])
-        ),
-      Promise.resolve([])
-    );
-
-  return updatePrimary.then(() =>
-    processSiblingsSequentially(otherCombos).then(siblingIds => {
-      // Every combination's listing id is now known - record them on the primary so it can
-      // always find its siblings again with a direct `ids` lookup (no search index needed).
-      const keptIdStrings = [id.uuid, ...siblingIds.map(sid => sid.uuid)];
-      return sdk.ownListings
-        .update(
-          { id, publicData: { [SIBLING_LISTING_IDS_KEY]: siblingIds.map(sid => sid.uuid) } },
-          queryParams
-        )
-        .then(stampResponse =>
-          // Orphan sweep: a partially-failed save can leave stray sibling listings that
-          // back-reference this group but are no longer tracked in siblingListingIds -
-          // published duplicates of a combo that confuse stock. Close any such stray.
-          // (own_listings/query can't filter by publicData, so filter client-side.)
-          sdk.ownListings
-            .query({ perPage: 100 })
-            .then(all => {
-              const orphans = all.data.data.filter(
-                l =>
-                  l.attributes.publicData?.[VARIANT_GROUP_ID_KEY] === id.uuid &&
-                  !keptIdStrings.includes(l.id.uuid) &&
-                  l.attributes.state !== LISTING_STATE_CLOSED
-              );
-              return orphans.reduce(
-                (chain, orphan) =>
-                  chain.then(() =>
-                    sdk.ownListings
-                      .close({ id: orphan.id }, { expand: true })
-                      .catch(e =>
-                        log.error(e, 'close-orphan-variant-failed', { siblingId: orphan.id })
-                      )
-                  ),
-                Promise.resolve()
-              );
-            })
-            .catch(e => log.error(e, 'orphan-variant-sweep-failed', {}))
-            .then(() => stampResponse)
-        );
-    })
-  );
 };
 
 ////////////////////
@@ -640,32 +451,13 @@ export const requestUpdateListing = (tab, data, config) => (dispatch, getState, 
 
 // If the just-published listing is the primary of a variant group, publish every sibling that's
 // still in draft state too - they were created alongside it but only the primary goes through
-// the wizard's own publish step.
-const publishDraftVariantSiblingsMaybe = (sdk, dispatch, siblingIdStrings) => {
-  if (!siblingIdStrings?.length) {
-    return Promise.resolve();
-  }
-  return sdk.ownListings
-    .query({ ids: siblingIdStrings.map(sid => new UUID(sid)) })
-    .then(response => {
-      const draftSiblings = response.data.data.filter(l => l.attributes.state === LISTING_STATE_DRAFT);
-      // Sequential on purpose: parallel publish bursts are prone to rate-limiting, which used
-      // to leave some siblings stuck in draft state (invisible and unpurchasable for buyers).
-      return draftSiblings.reduce(
-        (chain, sibling) =>
-          chain.then(() =>
-            sdk.ownListings
-              .publishDraft({ id: sibling.id }, { expand: true })
-              .then(r => dispatch(addMarketplaceEntities(r)))
-              .catch(e =>
-                log.error(e, 'publish-variant-sibling-failed', { siblingId: sibling.id })
-              )
-          ),
-        Promise.resolve()
-      );
-    })
-    .catch(e => log.error(e, 'query-variant-siblings-for-publish-failed', {}));
-};
+// the wizard's own publish step. Shared implementation in variantImport.js (see above).
+const publishDraftVariantSiblingsMaybe = (sdk, dispatch, siblingIdStrings) =>
+  publishVariantGroupCascade({
+    sdk,
+    siblingIdStrings,
+    onEntities: response => dispatch(addMarketplaceEntities(response)),
+  });
 
 const publishListingPayloadCreator = ({ listingId }, { dispatch, rejectWithValue, extra: sdk }) => {
   return sdk.ownListings

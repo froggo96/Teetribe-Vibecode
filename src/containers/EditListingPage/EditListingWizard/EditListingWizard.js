@@ -19,21 +19,8 @@ import {
   LISTING_PAGE_PARAM_TYPE_NEW,
 } from '../../../util/urlHelpers';
 import { createResourceLocatorString } from '../../../util/routes';
-import {
-  SCHEMA_TYPE_ENUM,
-  SCHEMA_TYPE_MULTI_ENUM,
-  SCHEMA_TYPE_TEXT,
-  SCHEMA_TYPE_SHORT_TEXT,
-  SCHEMA_TYPE_LONG,
-  SCHEMA_TYPE_BOOLEAN,
-  SCHEMA_TYPE_YOUTUBE,
-  propTypes,
-} from '../../../util/types';
-import {
-  isFieldForCategory,
-  isFieldForListingType,
-  pickCategoryFields,
-} from '../../../util/fieldHelpers';
+import { propTypes } from '../../../util/types';
+import { hasValidListingFieldsInExtendedData } from '../../../util/fieldHelpers';
 import { ensureCurrentUser, ensureListing } from '../../../util/data';
 import { getDisplayAccountType } from '../../../util/stripeConnect';
 import { INQUIRY_PROCESS_NAME, resolveLatestProcessName } from '../../../transactions/transaction';
@@ -154,60 +141,6 @@ const tabLabelAndSubmit = (intl, tab, isNewListingFlow, isPriceDisabled, process
     label: intl.formatMessage({ id: labelKey }),
     submitButton: intl.formatMessage({ id: submitButtonKey }),
   };
-};
-
-/**
- * Validate listing fields (in extended data) that are included through configListing.js
- * This is used to check if listing creation flow can show the "next" tab as active.
- *
- * @param {Object} publicData
- * @param {Object} privateData
- */
-const hasValidListingFieldsInExtendedData = (publicData, privateData, config) => {
-  const isValidField = (fieldConfig, fieldData) => {
-    const { key, schemaType, enumOptions = [], saveConfig = {} } = fieldConfig;
-
-    const schemaOptionKeys = enumOptions.map(o => `${o.option}`);
-    const hasValidEnumValue = optionData => {
-      return schemaOptionKeys.includes(optionData);
-    };
-    const hasValidMultiEnumValues = savedOptions => {
-      return savedOptions.every(optionData => schemaOptionKeys.includes(optionData));
-    };
-
-    const categoryKey = config.categoryConfiguration.key;
-    const categoryOptions = config.categoryConfiguration.categories;
-    const categoriesObj = pickCategoryFields(publicData, categoryKey, 1, categoryOptions);
-    const currentCategories = Object.values(categoriesObj);
-
-    const isTargetListingType = isFieldForListingType(publicData?.listingType, fieldConfig);
-    const isTargetCategory = isFieldForCategory(currentCategories, fieldConfig);
-    const isRequired = !!saveConfig.isRequired && isTargetListingType && isTargetCategory;
-
-    if (isRequired) {
-      const savedListingField = fieldData[key];
-      return schemaType === SCHEMA_TYPE_ENUM
-        ? typeof savedListingField === 'string' && hasValidEnumValue(savedListingField)
-        : schemaType === SCHEMA_TYPE_MULTI_ENUM
-        ? Array.isArray(savedListingField) && hasValidMultiEnumValues(savedListingField)
-        : schemaType === SCHEMA_TYPE_SHORT_TEXT
-        ? typeof savedListingField === 'string'
-        : schemaType === SCHEMA_TYPE_TEXT
-        ? typeof savedListingField === 'string'
-        : schemaType === SCHEMA_TYPE_LONG
-        ? typeof savedListingField === 'number' && Number.isInteger(savedListingField)
-        : schemaType === SCHEMA_TYPE_BOOLEAN
-        ? savedListingField === true || savedListingField === false
-        : schemaType === SCHEMA_TYPE_YOUTUBE
-        ? typeof savedListingField === 'string'
-        : false;
-    }
-    return true;
-  };
-  return config.listing.listingFields.reduce((isValid, fieldConfig) => {
-    const data = fieldConfig.scope === 'private' ? privateData : publicData;
-    return isValid && isValidField(fieldConfig, data);
-  }, true);
 };
 
 /**

@@ -9,8 +9,12 @@ import {
 } from '../transactions/transaction';
 import {
   EXTENDED_DATA_SCHEMA_TYPES,
+  SCHEMA_TYPE_ENUM,
   SCHEMA_TYPE_MULTI_ENUM,
+  SCHEMA_TYPE_SHORT_TEXT,
   SCHEMA_TYPE_TEXT,
+  SCHEMA_TYPE_LONG,
+  SCHEMA_TYPE_BOOLEAN,
   SCHEMA_TYPE_YOUTUBE,
 } from './types';
 import appSettings from '../config/settings';
@@ -84,6 +88,75 @@ export const isFieldForListingType = (listingType, fieldConfig) =>
   isFieldFor('listingType', listingType, fieldConfig);
 export const isFieldForCategory = (categories, fieldConfig) =>
   isFieldFor('category', categories, fieldConfig);
+
+/**
+ * Whether a single listing field's saved value satisfies its schema type and, if the field is
+ * marked required for the listing's current listingType/category, that it's actually present.
+ * Shared by EditListingWizard's tabCompleted() check and the bulk CSV importer's row validator
+ * (src/util/csvImportParsing.js) so both validate against config.listing.listingFields the same
+ * way - deliberately kept in this util file (not a container/component file) since two other
+ * util modules need to import it; a util importing from a container/duck previously caused a
+ * circular-import crash in this codebase's production bundle (see EditListingPage.duck.js).
+ *
+ * @param {Object} fieldConfig one entry from config.listing.listingFields
+ * @param {Object} fieldData the publicData or privateData object the field's value lives in
+ * @param {Object} publicData the listing's full publicData (for listingType/category matching)
+ * @param {Object} config app config, needs config.categoryConfiguration
+ */
+export const isValidField = (fieldConfig, fieldData, publicData, config) => {
+  const { key, schemaType, enumOptions = [], saveConfig = {} } = fieldConfig;
+
+  const schemaOptionKeys = enumOptions.map(o => `${o.option}`);
+  const hasValidEnumValue = optionData => {
+    return schemaOptionKeys.includes(optionData);
+  };
+  const hasValidMultiEnumValues = savedOptions => {
+    return savedOptions.every(optionData => schemaOptionKeys.includes(optionData));
+  };
+
+  const categoryKey = config.categoryConfiguration.key;
+  const categoryOptions = config.categoryConfiguration.categories;
+  const categoriesObj = pickCategoryFields(publicData, categoryKey, 1, categoryOptions);
+  const currentCategories = Object.values(categoriesObj);
+
+  const isTargetListingType = isFieldForListingType(publicData?.listingType, fieldConfig);
+  const isTargetCategory = isFieldForCategory(currentCategories, fieldConfig);
+  const isRequired = !!saveConfig.isRequired && isTargetListingType && isTargetCategory;
+
+  if (isRequired) {
+    const savedListingField = fieldData[key];
+    return schemaType === SCHEMA_TYPE_ENUM
+      ? typeof savedListingField === 'string' && hasValidEnumValue(savedListingField)
+      : schemaType === SCHEMA_TYPE_MULTI_ENUM
+      ? Array.isArray(savedListingField) && hasValidMultiEnumValues(savedListingField)
+      : schemaType === SCHEMA_TYPE_SHORT_TEXT
+      ? typeof savedListingField === 'string'
+      : schemaType === SCHEMA_TYPE_TEXT
+      ? typeof savedListingField === 'string'
+      : schemaType === SCHEMA_TYPE_LONG
+      ? typeof savedListingField === 'number' && Number.isInteger(savedListingField)
+      : schemaType === SCHEMA_TYPE_BOOLEAN
+      ? savedListingField === true || savedListingField === false
+      : schemaType === SCHEMA_TYPE_YOUTUBE
+      ? typeof savedListingField === 'string'
+      : false;
+  }
+  return true;
+};
+
+/**
+ * Validate listing fields (in extended data) that are included through configListing.js
+ * This is used to check if listing creation flow can show the "next" tab as active.
+ *
+ * @param {Object} publicData
+ * @param {Object} privateData
+ */
+export const hasValidListingFieldsInExtendedData = (publicData, privateData, config) => {
+  return config.listing.listingFields.reduce((isValid, fieldConfig) => {
+    const data = fieldConfig.scope === 'private' ? privateData : publicData;
+    return isValid && isValidField(fieldConfig, data, publicData, config);
+  }, true);
+};
 
 /**
  * Returns the value of the attribute in extended data.

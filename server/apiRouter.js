@@ -19,6 +19,7 @@ const transitionPrivileged = require('./api/transition-privileged');
 const deleteAccount = require('./api/delete-account');
 const toggleFavorite = require('./api/toggle-favorite');
 const updateCart = require('./api/update-cart');
+const fetchImportImage = require('./api/fetch-import-image');
 
 const createUserWithIdp = require('./api/auth/createUserWithIdp');
 
@@ -62,6 +63,7 @@ router.post('/transition-privileged', transitionPrivileged);
 router.post('/delete-account', deleteAccount);
 router.post('/toggle-favorite', toggleFavorite);
 router.post('/update-cart', updateCart);
+router.post('/fetch-import-image', express.json({ limit: '10kb' }), fetchImportImage);
 
 // Create user with identity provider (e.g. Facebook or Google)
 // This endpoint is called to create a new user after user has confirmed

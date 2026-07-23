@@ -90,6 +90,28 @@
   }
 }
 
+.bulkImportLinkWrapper {
+  margin: -12px 24px 24px 24px;
+
+  @media (--viewportMedium) {
+    margin: -20px 24px 32px 24px;
+  }
+
+  @media (--viewportLarge) {
+    margin: -20px 36px 32px 36px;
+  }
+}
+
+.bulkImportLink {
+  color: var(--marketplaceColor);
+  text-decoration: underline;
+
+  &:hover {
+    color: var(--marketplaceColorDark);
+    text-decoration: underline;
+  }
+}
+
 .listingCards {
   list-style: none;
   margin: 0;

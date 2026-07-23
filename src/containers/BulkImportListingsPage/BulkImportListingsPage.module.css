@@ -1,0 +1,132 @@
+@import '../../styles/customMediaQueries.css';
+
+.root {
+  width: 100%;
+  margin: 24px auto 0 auto;
+  padding: 0 24px;
+
+  @media (--viewportMedium) {
+    margin: 48px auto 0 auto;
+  }
+
+  @media (--viewportLarge) {
+    margin: 72px auto 0 auto;
+    max-width: calc(var(--contentMaxWidth) + 72px);
+    padding: 0 36px;
+  }
+
+  @media (--viewportXLarge) {
+    max-width: var(--contentMaxWidth);
+  }
+}
+
+.heading {
+  margin: 0 0 12px 0;
+}
+
+.description {
+  margin: 0 0 24px 0;
+  max-width: 60em;
+}
+
+.uploadLabel {
+  display: inline-block;
+  padding: 9px 18px;
+  border-radius: 4px;
+  background-color: var(--colorGrey100);
+  cursor: pointer;
+
+  &:hover {
+    background-color: var(--colorGrey200);
+  }
+}
+
+.fileInput {
+  /* Visually hidden but still focusable/clickable via the label's htmlFor */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.fileName {
+  margin-left: 12px;
+  color: var(--colorGrey700);
+}
+
+.spinner {
+  margin-left: 12px;
+}
+
+.error {
+  color: var(--colorFail);
+}
+
+.tableWrapper {
+  margin-top: 32px;
+  width: 100%;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+
+  & th,
+  & td {
+    text-align: left;
+    vertical-align: top;
+    padding: 12px;
+    border-bottom: 1px solid var(--colorGrey100);
+  }
+
+  & th {
+    color: var(--colorGrey700);
+    font-weight: var(--fontWeightSemiBold);
+  }
+}
+
+.status_invalid,
+.status_error {
+  color: var(--colorFail);
+}
+
+.status_ready {
+  color: var(--colorGrey700);
+}
+
+.status_importing {
+  color: var(--colorAttention);
+}
+
+.status_done {
+  color: var(--colorSuccess);
+}
+
+.actions {
+  margin-top: 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.importButton {
+  width: auto;
+  min-width: 200px;
+  padding: 0 24px;
+}
+
+.retryButton {
+  width: auto;
+  min-width: 160px;
+  padding: 0 24px;
+}
+
+.summary {
+  margin-top: 24px;
+  font-weight: var(--fontWeightSemiBold);
+}

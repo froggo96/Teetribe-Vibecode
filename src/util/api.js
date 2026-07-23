@@ -169,3 +169,29 @@ export const toggleFavoriteListing = body => {
 export const updateUserCart = body => {
   return post('/api/update-cart', body);
 };
+
+// Fetch a seller-supplied image URL through the local proxy (see
+// server/api/fetch-import-image.js), used by the bulk listing importer so the browser never has
+// to cross-origin-fetch an arbitrary third-party host directly (most image hosts don't send CORS
+// headers permitting that). Bypasses `request()` above: that endpoint's request body is plain
+// JSON (not transit) and its response is raw image bytes, not a transit/json payload.
+export const fetchImportImage = url => {
+  const requestUrl = `${apiBaseUrl()}/api/fetch-import-image`;
+  return window
+    .fetch(requestUrl, {
+      method: methods.POST,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    })
+    .then(res => {
+      const contentType = (res.headers.get('Content-Type') || '').split(';')[0];
+      if (res.status >= 400) {
+        return (contentType === 'application/json' ? res.json() : res.text()).then(data => {
+          const message = typeof data === 'string' ? data : data?.error;
+          throw Object.assign(new Error(message || 'Failed to fetch image'), { url });
+        });
+      }
+      return res.blob().then(blob => ({ blob, contentType }));
+    });
+};
